@@ -21,6 +21,8 @@ export type Database = {
           agent_system_prompt: string
           agent_enabled: boolean
           buffer_seconds: number
+          admin_phone: string | null
+          admin_system_prompt: string | null
           created_at: string
         }
         Insert: {
@@ -34,6 +36,8 @@ export type Database = {
           agent_system_prompt: string
           agent_enabled?: boolean
           buffer_seconds?: number
+          admin_phone?: string | null
+          admin_system_prompt?: string | null
           created_at?: string
         }
         Update: {
@@ -47,6 +51,8 @@ export type Database = {
           agent_system_prompt?: string
           agent_enabled?: boolean
           buffer_seconds?: number
+          admin_phone?: string | null
+          admin_system_prompt?: string | null
           created_at?: string
         }
         Relationships: []
@@ -86,6 +92,12 @@ export type Database = {
           tenant_id: string
           contact_phone: string
           contact_name: string | null
+          contact_email: string | null
+          notes: string | null
+          tags: string[]
+          custom_fields: Json
+          is_admin: boolean
+          pending_action: Json | null
           automation_paused: boolean
           paused_reason: 'manual' | 'derived_to_human' | 'error' | null
           last_message_at: string
@@ -97,6 +109,12 @@ export type Database = {
           tenant_id: string
           contact_phone: string
           contact_name?: string | null
+          contact_email?: string | null
+          notes?: string | null
+          tags?: string[]
+          custom_fields?: Json
+          is_admin?: boolean
+          pending_action?: Json | null
           automation_paused?: boolean
           paused_reason?: 'manual' | 'derived_to_human' | 'error' | null
           last_message_at?: string
@@ -108,6 +126,12 @@ export type Database = {
           tenant_id?: string
           contact_phone?: string
           contact_name?: string | null
+          contact_email?: string | null
+          notes?: string | null
+          tags?: string[]
+          custom_fields?: Json
+          is_admin?: boolean
+          pending_action?: Json | null
           automation_paused?: boolean
           paused_reason?: 'manual' | 'derived_to_human' | 'error' | null
           last_message_at?: string
@@ -232,6 +256,7 @@ export type Database = {
           tool_calls: Json | null
           raw_request: Json | null
           raw_response: Json | null
+          is_admin_action: boolean
           created_at: string
         }
         Insert: {
@@ -246,6 +271,7 @@ export type Database = {
           tool_calls?: Json | null
           raw_request?: Json | null
           raw_response?: Json | null
+          is_admin_action?: boolean
           created_at?: string
         }
         Update: {
@@ -260,6 +286,7 @@ export type Database = {
           tool_calls?: Json | null
           raw_request?: Json | null
           raw_response?: Json | null
+          is_admin_action?: boolean
           created_at?: string
         }
         Relationships: [

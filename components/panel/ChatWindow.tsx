@@ -96,6 +96,10 @@ export function ChatWindow({ conversation, onConversationUpdate, onBack }: Props
     onConversationUpdate({ automation_paused: paused });
   }
 
+  function handleContactUpdate(updated: Partial<Conversation>) {
+    onConversationUpdate(updated);
+  }
+
   function handleSent() {
     fetch(`/api/chats/${conversation.id}/messages`)
       .then(async (r) => {
@@ -109,7 +113,12 @@ export function ChatWindow({ conversation, onConversationUpdate, onBack }: Props
 
   return (
     <div className="flex flex-col h-full bg-background">
-      <ChatHeader conversation={conversation} onToggle={handleToggle} onBack={onBack} />
+      <ChatHeader
+        conversation={conversation}
+        onToggle={handleToggle}
+        onConversationUpdate={handleContactUpdate}
+        onBack={onBack}
+      />
 
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto bg-muted/30">

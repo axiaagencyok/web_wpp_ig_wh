@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { adminClient } from "@/lib/supabase/admin";
 import { processConversation } from "@/lib/ai/agent";
+import { processAdminConversation } from "@/lib/ai/admin-agent";
 import { z } from "zod";
 
 function isAuthorized(req: NextRequest): boolean {
@@ -18,11 +20,8 @@ export async function POST(req: NextRequest) {
   }
 
   let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
+  try { body = await req.json(); }
+  catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) {
@@ -32,10 +31,22 @@ export async function POST(req: NextRequest) {
   const { conversationId } = parsed.data;
 
   try {
+    // Determine if this is an admin conversation to route to the correct agent
+    const { data: conv } = await adminClient
+      .from("conversations")
+      .select("is_admin")
+      .eq("id", conversationId)
+      .single();
+
+    if (conv?.is_admin) {
+      await processAdminConversation(conversationId);
+      return NextResponse.json({ ok: true, agent: "admin" });
+    }
+
     const result = await processConversation(conversationId);
     return NextResponse.json(result);
   } catch (err) {
-    console.error("[process-message] Error inesperado:", (err as Error).message);
+    console.error("[process-message] Error:", (err as Error).message);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

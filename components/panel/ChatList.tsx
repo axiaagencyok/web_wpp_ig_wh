@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 import { createClient } from "@/lib/supabase/client";
-import { Search, Bot, AlertCircle, Hand, Sun, Moon } from "lucide-react";
+import { Search, Bot, AlertCircle, Hand, Sun, Moon, Star } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { avatarColor, phoneInitials } from "@/lib/utils";
 import type { Conversation } from "@/types/database.types";
@@ -39,7 +39,7 @@ function previewText(conv: ConvWithLastMsg) {
 }
 
 function ThemeToggle() {
-  const { theme, setTheme, resolvedTheme } = useTheme();
+  const { setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   if (!mounted) return <div className="w-8 h-8" />;
@@ -97,6 +97,76 @@ interface Props {
   onSelect: (conv: ConvWithLastMsg) => void;
 }
 
+function ConvItem({
+  conv,
+  isSelected,
+  onSelect,
+}: {
+  conv: ConvWithLastMsg;
+  isSelected: boolean;
+  onSelect: (c: ConvWithLastMsg) => void;
+}) {
+  const color    = avatarColor(conv.contact_phone);
+  const initials = phoneInitials(conv.contact_phone);
+  const name     = displayName(conv);
+  const firstTag = conv.tags?.[0] ?? null;
+
+  return (
+    <button
+      onClick={() => onSelect(conv)}
+      className={`
+        w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left
+        transition-all duration-200 cursor-pointer
+        ${isSelected
+          ? "bg-primary/10 shadow-sm"
+          : "hover:bg-muted hover:scale-[1.005]"
+        }
+      `}
+    >
+      {/* Avatar */}
+      <div
+        className="w-11 h-11 rounded-full flex items-center justify-center text-white text-[13px] font-semibold flex-shrink-0 shadow-sm"
+        style={{ backgroundColor: color }}
+      >
+        {initials}
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-1 mb-0.5">
+          <span className={`text-sm font-semibold truncate ${isSelected ? "text-primary" : "text-foreground"}`}>
+            {name}
+          </span>
+          <span className="text-[11px] text-muted-foreground flex-shrink-0 font-mono tabular-nums">
+            {formatTime(conv.last_message_at)}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between gap-1">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-xs text-muted-foreground truncate">
+              {previewText(conv)}
+            </span>
+            {firstTag && (
+              <span className="inline-flex items-center text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary flex-shrink-0">
+                {firstTag}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <StatusBadge conv={conv} />
+            {conv.unread_count > 0 && (
+              <span className="bg-primary text-primary-foreground text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 animate-in zoom-in duration-200">
+                {conv.unread_count > 9 ? "9+" : conv.unread_count}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </button>
+  );
+}
+
 export function ChatList({ selectedId, onSelect }: Props) {
   const [conversations, setConversations] = useState<ConvWithLastMsg[]>([]);
   const [search, setSearch] = useState("");
@@ -133,6 +203,10 @@ export function ChatList({ selectedId, onSelect }: Props) {
     displayName(c).toLowerCase().includes(search.toLowerCase())
   );
 
+  // Admin chat siempre primero
+  const adminConvs   = filtered.filter((c) => c.is_admin);
+  const regularConvs = filtered.filter((c) => !c.is_admin);
+
   return (
     <div className="flex flex-col h-full bg-background border-r border-border">
       {/* ── Header ── */}
@@ -155,9 +229,7 @@ export function ChatList({ selectedId, onSelect }: Props) {
 
       {/* ── Search ── */}
       <div className="px-3 py-2.5">
-        <div
-          className="flex items-center gap-2 bg-muted rounded-xl px-3 py-2 transition-all duration-200 focus-within:ring-2 focus-within:ring-primary/30 focus-within:bg-card"
-        >
+        <div className="flex items-center gap-2 bg-muted rounded-xl px-3 py-2 transition-all duration-200 focus-within:ring-2 focus-within:ring-primary/30 focus-within:bg-card">
           <Search size={14} className="text-muted-foreground flex-shrink-0" />
           <input
             ref={searchRef}
@@ -182,60 +254,50 @@ export function ChatList({ selectedId, onSelect }: Props) {
           </div>
         ) : (
           <div className="p-2 space-y-0.5">
-            {filtered.map((conv) => {
-              const isSelected = selectedId === conv.id;
-              const color = avatarColor(conv.contact_phone);
-              const initials = phoneInitials(conv.contact_phone);
-              const name = displayName(conv);
-
-              return (
-                <button
-                  key={conv.id}
-                  onClick={() => onSelect(conv)}
-                  className={`
-                    w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left
-                    transition-all duration-200 cursor-pointer
-                    ${isSelected
-                      ? "bg-primary/10 shadow-sm"
-                      : "hover:bg-muted hover:scale-[1.005]"
-                    }
-                  `}
-                >
-                  {/* Avatar */}
-                  <div
-                    className="w-11 h-11 rounded-full flex items-center justify-center text-white text-[13px] font-semibold flex-shrink-0 shadow-sm"
-                    style={{ backgroundColor: color }}
-                  >
-                    {initials}
-                  </div>
-
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-1 mb-0.5">
-                      <span className={`text-sm font-semibold truncate ${isSelected ? "text-primary" : "text-foreground"}`}>
-                        {name}
-                      </span>
-                      <span className="text-[11px] text-muted-foreground flex-shrink-0 font-mono tabular-nums">
-                        {formatTime(conv.last_message_at)}
+            {/* Admin chats — sticky section */}
+            {adminConvs.length > 0 && (
+              <>
+                <div className="flex items-center gap-1.5 px-3 py-1">
+                  <Star size={10} className="text-violet-500" />
+                  <span className="text-[10px] font-semibold text-violet-500 uppercase tracking-wider">
+                    Admin
+                  </span>
+                </div>
+                {adminConvs.map((conv) => (
+                  <div key={conv.id} className="relative">
+                    {/* Admin badge overlay */}
+                    <div className="absolute left-3 top-3 z-10">
+                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-600 dark:text-violet-400 border border-violet-500/20">
+                        <Star size={8} />
+                        Admin
                       </span>
                     </div>
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="text-xs text-muted-foreground truncate">
-                        {previewText(conv)}
-                      </span>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        <StatusBadge conv={conv} />
-                        {conv.unread_count > 0 && (
-                          <span className="bg-primary text-primary-foreground text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 animate-in zoom-in duration-200">
-                            {conv.unread_count > 9 ? "9+" : conv.unread_count}
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                    <ConvItem
+                      conv={conv}
+                      isSelected={selectedId === conv.id}
+                      onSelect={onSelect}
+                    />
                   </div>
-                </button>
-              );
-            })}
+                ))}
+                {regularConvs.length > 0 && (
+                  <div className="flex items-center gap-1.5 px-3 py-1 mt-1">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      Clientes
+                    </span>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Regular chats */}
+            {regularConvs.map((conv) => (
+              <ConvItem
+                key={conv.id}
+                conv={conv}
+                isSelected={selectedId === conv.id}
+                onSelect={onSelect}
+              />
+            ))}
           </div>
         )}
       </div>
