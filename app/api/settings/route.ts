@@ -4,9 +4,10 @@ import { adminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
 
 const patchSchema = z.object({
-  admin_phone:          z.string().max(30).nullable().optional(),
-  admin_system_prompt:  z.string().max(4000).nullable().optional(),
-  agent_system_prompt:  z.string().max(8000).optional(),
+  admin_phone:             z.string().max(30).nullable().optional(),
+  admin_system_prompt:     z.string().max(4000).nullable().optional(),
+  agent_system_prompt:     z.string().max(4000).optional(),
+  ig_agent_system_prompt:  z.string().max(4000).nullable().optional(),
 });
 
 export async function GET() {
@@ -26,7 +27,7 @@ export async function GET() {
 
     const { data: tenant, error: tenantErr } = await adminClient
       .from("tenants")
-      .select("id, name, whatsapp_number, admin_phone, admin_system_prompt, agent_system_prompt, google_sheet_id, google_sheet_range, agent_enabled")
+      .select("id, name, whatsapp_number, admin_phone, admin_system_prompt, agent_system_prompt, ig_agent_system_prompt, google_sheet_id, google_sheet_range, agent_enabled")
       .eq("id", userRow.tenant_id)
       .single();
 
@@ -66,7 +67,7 @@ export async function PATCH(req: NextRequest) {
       .from("tenants")
       .update(parsed.data)
       .eq("id", userRow.tenant_id)
-      .select("id, admin_phone, admin_system_prompt, agent_system_prompt")
+      .select("id, admin_phone, admin_system_prompt, agent_system_prompt, ig_agent_system_prompt")
       .single();
 
     if (error) {

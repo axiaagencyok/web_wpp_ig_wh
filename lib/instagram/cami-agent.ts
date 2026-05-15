@@ -186,6 +186,17 @@ export async function processCamiConversation(conversationId: string): Promise<v
     return;
   }
 
+  const { data: tenant } = await adminClient
+    .from("tenants")
+    .select("ig_agent_system_prompt")
+    .eq("id", conversation.tenant_id)
+    .single();
+
+  const fullSystemPrompt = SYSTEM_PROMPT_CAMI +
+    (tenant?.ig_agent_system_prompt?.trim()
+      ? `\n\n---\nPERSONALIZACIÓN ADICIONAL:\n${tenant.ig_agent_system_prompt}`
+      : "");
+
   // Load recent messages
   const { data: rawMessages } = await adminClient
     .from("messages")
@@ -219,7 +230,7 @@ export async function processCamiConversation(conversationId: string): Promise<v
     const response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 1024,
-      system: SYSTEM_PROMPT_CAMI,
+      system: fullSystemPrompt,
       tools: TOOL_DEFINITIONS,
       messages: loopMessages,
     });

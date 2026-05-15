@@ -194,7 +194,11 @@ export async function runAgent(
   for (let iteration = 0; iteration < 10; iteration++) {
     const response = await callClaude({
       max_tokens: 4096,
-      system: LUCAS_SYSTEM_PROMPT + AGENT_BASE_RULES,
+      system: LUCAS_SYSTEM_PROMPT +
+        (tenant.agent_system_prompt?.trim()
+          ? `\n\n---\nPERSONALIZACIÓN ADICIONAL:\n${tenant.agent_system_prompt}`
+          : "") +
+        AGENT_BASE_RULES,
       tools: TOOL_DEFINITIONS,
       messages: loopMessages,
     });
