@@ -148,7 +148,7 @@ export default function SettingsPage() {
                 <Bot size={14} className="text-primary" />
               </div>
               <div>
-                <h2 className="text-sm font-semibold text-foreground">Agente de atención (Cami)</h2>
+                <h2 className="text-sm font-semibold text-foreground">Agente de atención WhatsApp (Lucas)</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Define la personalidad, tono y reglas del agente que responde a los clientes por WhatsApp.
                 </p>
