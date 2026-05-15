@@ -28,7 +28,7 @@ export async function GET(
         "id, direction, sender, body, transcription, media_url, media_type, status, created_at, twilio_sid"
       )
       .eq("conversation_id", id)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .limit(100);
 
     if (error) {
@@ -45,7 +45,8 @@ export async function GET(
         if (e) console.error("[/api/chats/[id]/messages] unread reset error:", e.message);
       });
 
-    return NextResponse.json(data ?? []);
+    // Reverse so client receives chronological order (oldest → newest)
+    return NextResponse.json((data ?? []).reverse());
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[/api/chats/[id]/messages] unexpected error:", msg, err instanceof Error ? err.stack : "");
