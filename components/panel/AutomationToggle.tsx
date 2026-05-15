@@ -17,20 +17,18 @@ export function AutomationToggle({ conversationId, initialPaused, onToggle }: Pr
   async function toggle() {
     setLoading(true);
     const next = !paused;
-    setPaused(next);
-    onToggle(next);
+    setPaused(next); // optimistic local only
 
     try {
       const res = await fetch(`/api/chats/${conversationId}/toggle-automation`, { method: "PATCH" });
       if (!res.ok) throw new Error("Error al cambiar modo");
       const data = await res.json() as { automation_paused: boolean };
       setPaused(data.automation_paused);
-      onToggle(data.automation_paused);
-      toast.success(data.automation_paused ? "Modo manual activado" : "IA reactivada");
+      onToggle(data.automation_paused); // single call, server-confirmed
+      toast.success(data.automation_paused ? "Modo manual activado" : "IA reactivada", { duration: 1500 });
     } catch {
-      setPaused(!next);
-      onToggle(!next);
-      toast.error("No se pudo cambiar el modo");
+      setPaused(!next); // revert
+      toast.error("No se pudo cambiar el modo", { duration: 1500 });
     } finally {
       setLoading(false);
     }

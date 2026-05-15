@@ -16,6 +16,22 @@ export async function GET() {
     }
     if (!user) return new NextResponse("Unauthorized", { status: 401 });
 
+    // Get user's tenant to resolve admin_phone
+    const { data: userRow } = await supabase
+      .from("users")
+      .select("tenant_id")
+      .eq("id", user.id)
+      .single();
+
+    const adminPhone = userRow?.tenant_id
+      ? await supabase
+          .from("tenants")
+          .select("admin_phone")
+          .eq("id", userRow.tenant_id)
+          .single()
+          .then(({ data }) => data?.admin_phone ?? null)
+      : null;
+
     const { data: conversations, error: convError } = await supabase
       .from("conversations")
       .select("*")
@@ -52,6 +68,8 @@ export async function GET() {
 
     const result = conversations.map((c) => ({
       ...c,
+      // Re-evaluate is_admin based on current admin_phone to avoid stale data
+      is_admin: adminPhone ? c.contact_phone === adminPhone : c.is_admin,
       last_message: lastMsgMap.get(c.id) ?? null,
     }));
 
