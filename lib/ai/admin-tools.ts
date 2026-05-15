@@ -2,6 +2,22 @@ import Anthropic from "@anthropic-ai/sdk";
 
 export const ADMIN_TOOL_DEFINITIONS: Anthropic.Tool[] = [
   {
+    name: "get_catalog",
+    description:
+      "Catálogo de productos del negocio con precios actualizados desde Google Sheets. " +
+      "Llamá SIEMPRE antes de responder sobre productos, precios o disponibilidad — nunca afirmes que algo no existe sin haberlo consultado.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        category: {
+          type: "string",
+          description: "Filtro opcional de categoría (substring, case-insensitive). Ej: 'celular', 'lavarropas'.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
     name: "get_contacts_report",
     description: "Devuelve la lista de contactos del tenant con su último mensaje, fecha, tags y notas. Filtra por período y/o tags.",
     input_schema: {
@@ -162,6 +178,20 @@ export const ADMIN_TOOL_DEFINITIONS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "update_agent_prompt",
+    description: "Actualiza las instrucciones del agente de IA que atiende a los clientes. Cuando el admin pida cambiar algo del agente (tono, formato, emojis, asteriscos, reglas, etc.), tomá el PROMPT ACTUAL DEL AGENTE DE CLIENTES que tenés en contexto, aplicá el cambio puntual, y guardalo completo con esta tool. No pedís confirmación — ejecutás directamente.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        new_prompt: {
+          type: "string",
+          description: "El prompt completo del agente con el cambio aplicado.",
+        },
+      },
+      required: ["new_prompt"],
+    },
+  },
+  {
     name: "update_contact_info",
     description: "Actualiza la información CRM de un contacto (nombre, email, notas, tags).",
     input_schema: {
@@ -224,6 +254,11 @@ export interface DeleteCatalogItemInput {
 export interface SendMessageToContactInput {
   contact_phone: string;
   message: string;
+  confirmed?: boolean;
+}
+
+export interface UpdateAgentPromptInput {
+  new_prompt: string;
   confirmed?: boolean;
 }
 

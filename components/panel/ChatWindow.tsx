@@ -121,21 +121,21 @@ export function ChatWindow({ conversation, onConversationUpdate, onBack }: Props
       />
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto bg-muted/30">
+      <div className="flex-1 overflow-y-auto bg-[#F8F5EF] dark:bg-[#0A0818]">
         {loading ? (
           <MessagesSkeleton />
         ) : messages.length === 0 ? (
           <div className="flex justify-center pt-12">
-            <span className="text-sm text-muted-foreground bg-card border border-border px-4 py-1.5 rounded-full shadow-sm">
+            <span className="text-sm text-gray-400 bg-white dark:bg-[#1A1530] border border-gray-100 dark:border-[#2D2A45] px-4 py-1.5 rounded-full shadow-sm">
               Sin mensajes todavía
             </span>
           </div>
         ) : (
-          <div className="py-4 space-y-2">
+          <div className="py-5 space-y-2.5">
             {messages.map((msg) => <MessageBubble key={msg.id} message={msg} />)}
           </div>
         )}
-        <div ref={bottomRef} className="h-2" />
+        <div ref={bottomRef} className="h-3" />
       </div>
 
       <MessageInput conversationId={conversation.id} onSent={handleSent} />

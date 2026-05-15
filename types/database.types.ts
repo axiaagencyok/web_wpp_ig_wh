@@ -100,6 +100,8 @@ export type Database = {
           pending_action: Json | null
           automation_paused: boolean
           paused_reason: 'manual' | 'derived_to_human' | 'error' | null
+          deal_status: 'nuevo' | 'contactado' | 'esperando_pago' | 'pago_pendiente' | 'cerrado'
+          channel: 'whatsapp' | 'instagram'
           last_message_at: string
           unread_count: number
           created_at: string
@@ -117,6 +119,8 @@ export type Database = {
           pending_action?: Json | null
           automation_paused?: boolean
           paused_reason?: 'manual' | 'derived_to_human' | 'error' | null
+          deal_status?: 'nuevo' | 'contactado' | 'esperando_pago' | 'pago_pendiente' | 'cerrado'
+          channel?: 'whatsapp' | 'instagram'
           last_message_at?: string
           unread_count?: number
           created_at?: string
@@ -134,6 +138,8 @@ export type Database = {
           pending_action?: Json | null
           automation_paused?: boolean
           paused_reason?: 'manual' | 'derived_to_human' | 'error' | null
+          deal_status?: 'nuevo' | 'contactado' | 'esperando_pago' | 'pago_pendiente' | 'cerrado'
+          channel?: 'whatsapp' | 'instagram'
           last_message_at?: string
           unread_count?: number
           created_at?: string

@@ -1,62 +1,83 @@
 import { adminClient } from "@/lib/supabase/admin";
 
-/**
- * Inserta o actualiza la entrada del buffer para una conversación.
- * Si ya existe una entrada no-procesando, extiende el process_after.
- * Si no, crea una nueva.
- */
 export async function upsertBuffer(
   conversationId: string,
   bufferSeconds: number
 ): Promise<void> {
   const processAfter = new Date(Date.now() + bufferSeconds * 1000).toISOString();
 
-  // Intentar extender una entrada existente
-  const { data: updated } = await adminClient
-    .from("message_buffer")
-    .update({ process_after: processAfter })
-    .eq("conversation_id", conversationId)
-    .eq("processing", false)
-    .select("id");
+  // Try insert first. If a row already exists (unique violation on conversation_id),
+  // update process_after only when not mid-processing — avoids creating duplicate
+  // entries that would trigger multiple simultaneous Anthropic calls.
+  const { error } = await adminClient.from("message_buffer").insert({
+    conversation_id: conversationId,
+    process_after: processAfter,
+  });
 
-  if (!updated || updated.length === 0) {
-    // No había entrada pendiente — crear una nueva
-    await adminClient.from("message_buffer").insert({
-      conversation_id: conversationId,
-      process_after: processAfter,
-    });
+  if (!error) return;
+
+  if (error.code === "23505") {
+    await adminClient
+      .from("message_buffer")
+      .update({ process_after: processAfter })
+      .eq("conversation_id", conversationId)
+      .eq("processing", false);
+    return;
   }
+
+  console.error("[buffer] upsertBuffer unexpected error:", error.message);
 }
 
 /**
- * Toma entradas listas (process_after < NOW, no procesando),
- * las marca como processing y devuelve sus conversation_ids.
+ * Atomically claims ready entries via a single UPDATE…FOR UPDATE SKIP LOCKED.
+ * Two concurrent workers will never claim the same row.
  */
-export async function claimReadyEntries(): Promise<
-  { bufferId: string; conversationId: string }[]
-> {
-  const { data: entries } = await adminClient
-    .from("message_buffer")
-    .select("id, conversation_id")
-    .lt("process_after", new Date().toISOString())
-    .eq("processing", false)
-    .limit(50); // proceso en lote de hasta 50
+export async function claimReadyEntries(
+  batchLimit = 5
+): Promise<{ bufferId: string; conversationId: string; retryCount: number }[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (adminClient as any).rpc("claim_buffer_entries", {
+    batch_limit: batchLimit,
+  });
 
-  if (!entries || entries.length === 0) return [];
+  if (error) {
+    console.error("[buffer] Error claiming entries:", (error as { message: string }).message);
+    return [];
+  }
 
-  const ids = entries.map((e) => e.id);
-
-  await adminClient
-    .from("message_buffer")
-    .update({ processing: true })
-    .in("id", ids);
-
-  return entries.map((e) => ({
-    bufferId: e.id,
-    conversationId: e.conversation_id,
-  }));
+  return ((data ?? []) as { id: string; conversation_id: string; retry_count: number }[]).map(
+    (e) => ({
+      bufferId: e.id,
+      conversationId: e.conversation_id,
+      retryCount: e.retry_count,
+    })
+  );
 }
 
 export async function deleteBufferEntry(bufferId: string): Promise<void> {
   await adminClient.from("message_buffer").delete().eq("id", bufferId);
+}
+
+/**
+ * Called when processing fails. Increments retry_count, resets processing=false,
+ * and applies exponential backoff (30s → 90s) before the next attempt.
+ * After 3 failures (retry_count 0→1→2→deleted) the entry is abandoned.
+ */
+export async function releaseBufferEntry(
+  bufferId: string,
+  retryCount: number
+): Promise<void> {
+  const nextRetry = retryCount + 1;
+  if (nextRetry >= 3) {
+    await deleteBufferEntry(bufferId);
+    console.warn(`[buffer] Entry ${bufferId} abandoned after ${nextRetry} attempts`);
+    return;
+  }
+  // Exponential backoff: 30 s on first retry, 90 s on second
+  const backoffMs = 30_000 * Math.pow(3, retryCount);
+  const processAfter = new Date(Date.now() + backoffMs).toISOString();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (adminClient.from("message_buffer") as any)
+    .update({ processing: false, retry_count: nextRetry, process_after: processAfter })
+    .eq("id", bufferId);
 }

@@ -42,29 +42,29 @@ export function AutomationToggle({ conversationId, initialPaused, onToggle }: Pr
       disabled={loading}
       title={paused ? "IA pausada — clic para reactivar" : "IA activa — clic para tomar control"}
       className={`
-        flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium
-        transition-all duration-200 select-none border cursor-pointer
+        flex items-center gap-2 rounded-full px-3.5 py-2 text-[12px] font-semibold
+        border transition-all duration-200 select-none cursor-pointer
         disabled:opacity-50 disabled:cursor-not-allowed
         ${paused
-          ? "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20"
-          : "bg-primary/10 border-primary/20 text-primary hover:bg-primary/20"
+          ? "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100 dark:bg-amber-900/20 dark:border-amber-700 dark:text-amber-400"
+          : "bg-violet-50 border-violet-200 text-violet-700 hover:bg-violet-100 dark:bg-violet-900/20 dark:border-violet-700 dark:text-violet-300"
         }
       `}
     >
-      {/* Switch track */}
+      {/* Toggle track */}
       <div className={`
         relative w-8 h-[18px] rounded-full transition-colors duration-200 flex-shrink-0
-        ${paused ? "bg-amber-400/30" : "bg-primary/30"}
+        ${paused ? "bg-amber-200 dark:bg-amber-700/40" : "bg-violet-200 dark:bg-violet-700/40"}
       `}>
         <span className={`
           absolute top-0.5 w-3.5 h-3.5 rounded-full shadow-sm transition-all duration-200
-          ${paused ? "left-0.5 bg-amber-500 dark:bg-amber-400" : "left-4 bg-primary"}
+          ${paused ? "left-0.5 bg-amber-500" : "left-4 bg-violet-600"}
         `} />
       </div>
 
       {paused
         ? <><Hand size={11} className="flex-shrink-0" />Manual</>
-        : <><Bot size={11} className="flex-shrink-0" /><span className="flex items-center gap-1">IA<span className={`w-1.5 h-1.5 rounded-full bg-primary animate-pulse`} /></span></>
+        : <><Bot size={11} className="flex-shrink-0" /><span className="flex items-center gap-1">IA <span className="w-1.5 h-1.5 rounded-full bg-violet-600 dark:bg-violet-400 animate-pulse" /></span></>
       }
     </button>
   );

@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { adminClient } from "@/lib/supabase/admin";
 import { getMessagingProvider } from "@/lib/messaging";
 import { getCatalog, updateCell, appendRow, clearRow } from "@/lib/google/sheets";
+import { getTenantCatalog } from "./business-context";
 import {
   ADMIN_TOOL_DEFINITIONS,
   type GetContactsReportInput,
@@ -13,12 +14,43 @@ import {
   type SendMessageToContactInput,
   type PauseConversationInput,
   type UpdateContactInfoInput,
+  type UpdateAgentPromptInput,
 } from "./admin-tools";
 import type { Conversation, Tenant } from "@/types/database.types";
 
 const MAX_ITERATIONS = 10;
 const MODEL = "claude-sonnet-4-5";
+const FALLBACK_MODEL = "claude-haiku-4-5-20251001";
+const RETRY_DELAYS_MS = [1_000, 3_000, 9_000];
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+async function callClaude(
+  params: Omit<Anthropic.MessageCreateParamsNonStreaming, "model">
+): Promise<Anthropic.Message> {
+  for (const [modelIdx, model] of [MODEL, FALLBACK_MODEL].entries()) {
+    const isLastModel = modelIdx === 1;
+    for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+      try {
+        return await anthropic.messages.create({ ...params, model });
+      } catch (err) {
+        const status = (err as { status?: number }).status;
+        const isOverload = status === 529 || status === 503;
+
+        if (isOverload && attempt < RETRY_DELAYS_MS.length) {
+          console.warn(`[admin-agent] ${status} (${model}) attempt ${attempt + 1}, retrying in ${RETRY_DELAYS_MS[attempt]}ms`);
+          await new Promise<void>((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]));
+          continue;
+        }
+        if (isOverload && !isLastModel) {
+          console.warn(`[admin-agent] ${status} on ${model} exhausted — falling back to ${FALLBACK_MODEL}`);
+          break;
+        }
+        throw err;
+      }
+    }
+  }
+  throw new Error("[admin-agent] All Claude API attempts exhausted");
+}
 
 // ── Period → Date range ───────────────────────────────────────────────────────
 
@@ -38,6 +70,11 @@ async function executeTool(
 ): Promise<string> {
 
   // ── Read-only tools ──────────────────────────────────────────────────────────
+
+  if (name === "get_catalog") {
+    const { category } = input as { category?: string };
+    return getTenantCatalog(tenant, category);
+  }
 
   if (name === "get_contacts_report") {
     const { period = "7d", tags, limit = 20 } = input as GetContactsReportInput;
@@ -267,6 +304,18 @@ async function executeTool(
     return `✅ IA ${paused ? "pausada" : "reactivada"} para ${contact_phone}.`;
   }
 
+  if (name === "update_agent_prompt") {
+    const { new_prompt } = input as unknown as UpdateAgentPromptInput;
+
+    const { error } = await adminClient
+      .from("tenants")
+      .update({ agent_system_prompt: new_prompt })
+      .eq("id", tenantId);
+
+    if (error) return `Error al actualizar el prompt: ${error.message}`;
+    return `✅ Listo, cambio aplicado al agente.`;
+  }
+
   if (name === "update_contact_info") {
     const { contact_phone, fields } = input as unknown as UpdateContactInfoInput;
 
@@ -300,9 +349,14 @@ function buildAdminSystemPrompt(tenant: Tenant): string {
   const base = tenant.admin_system_prompt ??
     `Sos el asistente operativo de ${tenant.name}. El gerente te escribe por WhatsApp para pedirte reportes, modificar el catálogo, o consultar info del negocio. Sos preciso, conciso, profesional. Antes de cualquier acción que modifique datos (precio, broadcast, borrar), pedí confirmación explícita.`;
 
-  return `${base}
+  const currentAgentPrompt = tenant.agent_system_prompt
+    ? `\n\nPROMPT ACTUAL DEL AGENTE DE CLIENTES:\n"""\n${tenant.agent_system_prompt}\n"""\nCuando el gerente pida cambiar algo del agente, modificá ese prompt aplicando el cambio puntual y guardalo con update_agent_prompt.`
+    : "";
+
+  return `${base}${currentAgentPrompt}
 
 Tenés acceso a las siguientes tools:
+- get_catalog: catálogo de productos con precios desde Google Sheets. Llamá SIEMPRE antes de responder sobre productos, precios o disponibilidad — nunca afirmes que algo no existe sin consultarlo primero.
 - get_contacts_report: lista de contactos con último mensaje, tags y notas.
 - get_messages_report: mensajes en un período, filtrado por contacto.
 - get_stats: estadísticas del período (mensajes, IA vs manual, tokens, derivaciones).
@@ -313,7 +367,9 @@ Tenés acceso a las siguientes tools:
 - pause_conversation_automation: pausa/reactiva IA para un chat.
 - update_contact_info: actualiza nombre, email, notas, tags de un contacto.
 
-Para acciones destructivas siempre mostrás un PREVIEW y esperás confirmación.
+Para acciones destructivas (update_catalog_price, add_catalog_item, delete_catalog_item, send_message_to_contact) siempre mostrás un PREVIEW y esperás confirmación explícita ("sí", "confirmá", "dale") antes de ejecutar.
+REGLA CRÍTICA: Después de ejecutar CUALQUIER acción (tool call), SIEMPRE generá una respuesta de texto confirmando al admin qué hiciste, en lenguaje natural y concreto. Ejemplo: "Listo, actualicé el precio del iPhone 14 de $1.200.000 a $1.300.000." Si la acción falló, reportá el error con claridad. Nunca quedes en silencio después de una tool.
+Nunca te despidas ni cierres la conversación a menos que el admin lo diga explícitamente.
 Respondé siempre en español. Sé conciso.`;
 }
 
@@ -342,15 +398,15 @@ export async function processAdminConversation(conversationId: string): Promise<
     return;
   }
 
-  // ── Load last N messages ──────────────────────────────────────────────────
+  // ── Load last N messages (most recent, in chronological order) ───────────
   const { data: rawMessages } = await adminClient
     .from("messages")
     .select("*")
     .eq("conversation_id", conversationId)
-    .order("created_at", { ascending: true })
+    .order("created_at", { ascending: false })
     .limit(30);
 
-  const messages = rawMessages ?? [];
+  const messages = (rawMessages ?? []).reverse();
 
   // Build message history (simple: inbound = user, outbound = assistant)
   const history: Anthropic.MessageParam[] = [];
@@ -378,12 +434,12 @@ export async function processAdminConversation(conversationId: string): Promise<
   let promptTokensTotal = 0;
   let completionTokensTotal = 0;
   const toolCallsLog: unknown[] = [];
+  let lastToolResult = ""; // fallback if Claude is silent after tool execution
 
   while (iterations < MAX_ITERATIONS) {
     iterations++;
 
-    const response = await anthropic.messages.create({
-      model:  MODEL,
+    const response = await callClaude({
       max_tokens: 4096,
       system: buildAdminSystemPrompt(tenant),
       tools:  ADMIN_TOOL_DEFINITIONS,
@@ -411,6 +467,8 @@ export async function processAdminConversation(conversationId: string): Promise<
             tenant
           );
 
+          lastToolResult = result; // track for fallback
+
           toolResults.push({
             type:       "tool_result",
             tool_use_id: block.id,
@@ -431,6 +489,12 @@ export async function processAdminConversation(conversationId: string): Promise<
       .join("\n")
       .trim();
     break;
+  }
+
+  // If Claude was silent after tool execution, use the last tool result directly
+  if (!finalText && lastToolResult) {
+    console.warn("[admin-agent] Claude silent after tool — using tool result as response");
+    finalText = lastToolResult;
   }
 
   if (!finalText) {

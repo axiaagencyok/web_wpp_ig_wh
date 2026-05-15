@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Bot } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -30,35 +30,38 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-full flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 px-4">
-      {/* Background decoration */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full bg-primary/5 blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full bg-accent/5 blur-3xl" />
+    <div className="min-h-full flex items-center justify-center bg-background px-4">
+      {/* Subtle background texture */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-30">
+        <div className="absolute -top-60 -right-60 w-[500px] h-[500px] rounded-full bg-accent/10 blur-3xl" />
+        <div className="absolute -bottom-60 -left-60 w-[500px] h-[500px] rounded-full bg-accent/8 blur-3xl" />
       </div>
 
       <div className="relative w-full max-w-sm">
-        {/* Card */}
-        <div className="bg-card border border-border rounded-3xl p-8 shadow-xl shadow-black/5">
-          {/* Brand */}
-          <div className="flex flex-col items-center gap-3 mb-8">
-            <div className="w-12 h-12 rounded-2xl bg-primary flex items-center justify-center shadow-lg shadow-primary/25">
-              <Bot size={22} className="text-primary-foreground" />
-            </div>
-            <div className="text-center">
-              <h1 className="font-display text-2xl font-bold text-foreground tracking-tight leading-none">
-                Fenoma
-              </h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                WhatsApp Agent Panel
-              </p>
-            </div>
-          </div>
+        {/* Brand */}
+        <div className="flex flex-col items-center gap-5 mb-10">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/brand/Logo%20Fenoma%20PNG%20vertical.png"
+            alt="Fenoma"
+            width={140}
+            height={140}
+            className="object-contain dark:brightness-90"
+          />
+        </div>
 
-          {/* Form */}
+        {/* Card */}
+        <div className="bg-card border border-border rounded-3xl px-8 py-8 shadow-sm">
+          <h1 className="font-display text-xl font-semibold text-foreground tracking-tight text-center mb-1">
+            Bienvenido
+          </h1>
+          <p className="text-sm text-muted-foreground text-center mb-7">
+            Ingresá para acceder al panel
+          </p>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-foreground/70 uppercase tracking-wider">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Email
               </label>
               <input
@@ -70,14 +73,14 @@ export default function LoginPage() {
                 className="
                   w-full rounded-xl bg-muted border border-transparent px-4 py-2.5
                   text-sm text-foreground placeholder:text-muted-foreground
-                  outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/30 focus:bg-background
+                  outline-none focus:ring-2 focus:ring-primary/20 focus:border-border focus:bg-background
                   transition-all duration-200
                 "
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-foreground/70 uppercase tracking-wider">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Contraseña
               </label>
               <input
@@ -89,7 +92,7 @@ export default function LoginPage() {
                 className="
                   w-full rounded-xl bg-muted border border-transparent px-4 py-2.5
                   text-sm text-foreground placeholder:text-muted-foreground
-                  outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/30 focus:bg-background
+                  outline-none focus:ring-2 focus:ring-primary/20 focus:border-border focus:bg-background
                   transition-all duration-200
                 "
               />
@@ -99,12 +102,12 @@ export default function LoginPage() {
               type="submit"
               disabled={loading}
               className="
-                w-full flex items-center justify-center gap-2 mt-2
+                w-full flex items-center justify-center gap-2 mt-3
                 rounded-xl bg-primary text-primary-foreground
                 py-2.5 text-sm font-semibold
                 hover:opacity-90 transition-all duration-200
                 disabled:opacity-60 disabled:cursor-not-allowed
-                shadow-lg shadow-primary/20 cursor-pointer
+                cursor-pointer
               "
             >
               {loading
@@ -115,7 +118,7 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p className="text-center text-xs text-muted-foreground mt-5">
+        <p className="text-center text-xs text-muted-foreground mt-6">
           Fenoma · WhatsApp Agent
         </p>
       </div>

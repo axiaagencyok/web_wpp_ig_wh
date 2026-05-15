@@ -9,10 +9,33 @@ interface Props {
   onSent: () => void;
 }
 
+const QUICK_REPLIES = [
+  { label: "Saludo",          text: "¡Hola! ¿En qué puedo ayudarte hoy? 😊" },
+  { label: "Envíos",          text: "Los envíos se realizan de lunes a viernes en 3-5 días hábiles." },
+  { label: "Métodos de pago", text: "Aceptamos transferencia bancaria, tarjeta de crédito/débito y efectivo." },
+  { label: "Devoluciones",    text: "Para gestionar una devolución escribinos con tu número de pedido y te ayudamos." },
+];
+
 export function MessageInput({ conversationId, onSent }: Props) {
-  const [text, setText] = useState("");
+  const [text, setText]       = useState("");
   const [sending, setSending] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  function applyHeight(el: HTMLTextAreaElement) {
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 130) + "px";
+  }
+
+  function insertQuickReply(reply: string) {
+    setText(reply);
+    setTimeout(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      applyHeight(el);
+      el.focus();
+      el.setSelectionRange(reply.length, reply.length);
+    }, 0);
+  }
 
   async function send() {
     const trimmed = text.trim();
@@ -51,50 +74,75 @@ export function MessageInput({ conversationId, onSent }: Props) {
 
   function onInput(e: React.ChangeEvent<HTMLTextAreaElement>) {
     setText(e.target.value);
-    const el = e.target;
-    el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 120) + "px";
+    applyHeight(e.target);
   }
 
   const hasText = text.trim().length > 0;
 
   return (
-    <div className="flex items-end gap-2.5 px-4 py-3 bg-card border-t border-border">
-      <div className="flex-1 relative">
-        <textarea
-          ref={textareaRef}
-          value={text}
-          onChange={onInput}
-          onKeyDown={onKeyDown}
-          placeholder="Escribí un mensaje…"
-          rows={1}
-          className="
-            w-full resize-none rounded-2xl bg-muted px-4 py-2.5
-            text-foreground placeholder:text-muted-foreground text-sm
-            outline-none focus:ring-2 focus:ring-primary/30 focus:bg-background
-            leading-relaxed max-h-[120px] overflow-y-auto
-            transition-all duration-200
-          "
-        />
+    <div className="bg-white dark:bg-[#1A1530] border-t border-gray-100 dark:border-[#2D2A45] shadow-[0_-4px_20px_rgba(17,24,39,0.04)]">
+      {/* Quick reply chips */}
+      <div className="flex items-center gap-2 px-4 pt-3 pb-0 overflow-x-auto scrollbar-none">
+        {QUICK_REPLIES.map((qr) => (
+          <button
+            key={qr.label}
+            onClick={() => insertQuickReply(qr.text)}
+            className="flex-shrink-0 text-[12px] font-medium px-3.5 py-1.5 rounded-full border border-gray-200 dark:border-[#2D2A45] bg-white dark:bg-white/5 text-gray-600 dark:text-gray-400 hover:bg-violet-50 hover:text-violet-700 hover:border-violet-200 dark:hover:bg-violet-900/20 dark:hover:text-violet-300 dark:hover:border-violet-700 transition-all duration-150 cursor-pointer whitespace-nowrap"
+          >
+            {qr.label}
+          </button>
+        ))}
       </div>
 
-      <button
-        onClick={send}
-        disabled={!hasText || sending}
-        className="
-          flex-shrink-0 flex items-center justify-center
-          w-10 h-10 rounded-full bg-primary text-primary-foreground
-          transition-all duration-200 cursor-pointer
-          hover:opacity-90 hover:scale-105
-          disabled:opacity-40 disabled:cursor-not-allowed disabled:scale-100
-          shadow-sm shadow-primary/20
-        "
-      >
-        {sending
-          ? <span className="w-4 h-4 border-2 border-primary-foreground/40 border-t-primary-foreground rounded-full animate-spin" />
-          : <Send size={16} />
-        }
-      </button>
+      {/* Input row */}
+      <div className="flex items-end gap-3 px-4 py-3">
+        <div className="flex-1 relative">
+          <textarea
+            ref={textareaRef}
+            value={text}
+            onChange={onInput}
+            onKeyDown={onKeyDown}
+            placeholder="Escribí un mensaje…"
+            rows={1}
+            className="
+              w-full resize-none rounded-2xl
+              bg-gray-50 dark:bg-white/5
+              border border-gray-200 dark:border-[#2D2A45]
+              px-4 py-3
+              text-[15px] text-gray-800 dark:text-gray-100
+              placeholder:text-gray-400
+              outline-none
+              focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-700
+              focus:border-violet-300 dark:focus:border-violet-700
+              focus:bg-white dark:focus:bg-white/10
+              leading-relaxed max-h-[130px] overflow-y-auto
+              transition-all duration-200
+              min-h-[48px]
+            "
+          />
+        </div>
+
+        <button
+          onClick={send}
+          disabled={!hasText || sending}
+          className="
+            flex-shrink-0 flex items-center justify-center
+            w-12 h-12 rounded-full
+            bg-violet-600 hover:bg-violet-700
+            text-white
+            transition-all duration-200 cursor-pointer
+            hover:scale-105
+            disabled:opacity-40 disabled:cursor-not-allowed disabled:scale-100 disabled:shadow-none
+            shadow-[0_8px_24px_rgba(124,58,237,0.35)]
+            hover:shadow-[0_12px_28px_rgba(124,58,237,0.45)]
+          "
+        >
+          {sending
+            ? <span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+            : <Send size={18} />
+          }
+        </button>
+      </div>
     </div>
   );
 }

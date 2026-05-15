@@ -21,8 +21,9 @@ export default function SettingsPage() {
   const [loading, setLoading]     = useState(true);
   const [saving, setSaving]       = useState(false);
 
-  const [adminPhone, setAdminPhone]   = useState("");
-  const [adminPrompt, setAdminPrompt] = useState("");
+  const [adminPhone, setAdminPhone]     = useState("");
+  const [adminPrompt, setAdminPrompt]   = useState("");
+  const [agentPrompt, setAgentPrompt]   = useState("");
 
   useEffect(() => {
     fetch("/api/settings")
@@ -34,6 +35,7 @@ export default function SettingsPage() {
         setSettings(data);
         setAdminPhone(data.admin_phone ?? "");
         setAdminPrompt(data.admin_system_prompt ?? "");
+        setAgentPrompt(data.agent_system_prompt ?? "");
       })
       .catch((err) => toast.error((err as Error).message))
       .finally(() => setLoading(false));
@@ -47,8 +49,9 @@ export default function SettingsPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          admin_phone:         adminPhone || null,
-          admin_system_prompt: adminPrompt || null,
+          admin_phone:          adminPhone || null,
+          admin_system_prompt:  adminPrompt || null,
+          agent_system_prompt:  agentPrompt || undefined,
         }),
       });
       if (!res.ok) {
@@ -103,8 +106,8 @@ export default function SettingsPage() {
           {/* ── Admin WhatsApp ── */}
           <section className="bg-card border border-border rounded-2xl p-5 space-y-4">
             <div className="flex items-start gap-2">
-              <div className="w-7 h-7 rounded-lg bg-violet-500/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <Bot size={14} className="text-violet-500" />
+              <div className="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Bot size={14} className="text-accent" />
               </div>
               <div>
                 <h2 className="text-sm font-semibold text-foreground">Admin via WhatsApp</h2>
@@ -135,6 +138,34 @@ export default function SettingsPage() {
                 rows={6}
                 className={`${inputCls} resize-none leading-relaxed`}
               />
+            </Field>
+          </section>
+
+          {/* ── Agente de atención ── */}
+          <section className="bg-card border border-border rounded-2xl p-5 space-y-4">
+            <div className="flex items-start gap-2">
+              <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Bot size={14} className="text-primary" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Agente de atención (Cami)</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Define la personalidad, tono y reglas del agente que responde a los clientes por WhatsApp.
+                </p>
+              </div>
+            </div>
+
+            <Field label="System prompt del agente" icon={<Bot size={13} />}>
+              <textarea
+                value={agentPrompt}
+                onChange={(e) => setAgentPrompt(e.target.value)}
+                placeholder={`Sos Cami, la asistente virtual de ${settings?.name ?? "nuestro negocio"}. Respondés consultas de clientes por WhatsApp de forma amigable, clara y concisa. Siempre saludás con calidez, ofrecés ayuda proactiva y derivás a un humano si la consulta es compleja o el cliente lo pide.`}
+                rows={8}
+                className={`${inputCls} resize-none leading-relaxed`}
+              />
+              <p className="text-[10px] text-muted-foreground px-1">
+                Este prompt define el comportamiento del agente IA con tus clientes. Podés incluir nombre, tono, productos, horarios y restricciones.
+              </p>
             </Field>
           </section>
 

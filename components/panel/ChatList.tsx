@@ -3,10 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 import { createClient } from "@/lib/supabase/client";
-import { Search, Bot, AlertCircle, Hand, Sun, Moon, Star } from "lucide-react";
+import { Search, Hand, Sun, Moon, Star, AlertCircle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { avatarColor, phoneInitials } from "@/lib/utils";
+import { avatarGradient, nameInitials } from "@/lib/utils";
 import type { Conversation } from "@/types/database.types";
+
+const DEAL_DOT: Record<Conversation["deal_status"], { color: string; label: string }> = {
+  nuevo:           { color: "#A89E90", label: "Nuevo"          },
+  contactado:      { color: "#8B5CF6", label: "Contactado"     },
+  esperando_pago:  { color: "#D97706", label: "Esperando pago" },
+  pago_pendiente:  { color: "#B45309", label: "Pago pendiente" },
+  cerrado:         { color: "#65A30D", label: "Cerrado"        },
+};
 
 type ConvWithLastMsg = Conversation & {
   last_message: {
@@ -15,26 +23,38 @@ type ConvWithLastMsg = Conversation & {
     direction: string;
     media_type: string | null;
   } | null;
+  custom_fields: Record<string, string> | null;
 };
+
+type Tab = "all" | "unread" | "unassigned";
 
 function formatTime(iso: string) {
   const d = new Date(iso);
   const now = new Date();
-  const isToday = d.toDateString() === now.toDateString();
-  if (isToday) return d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+  if (d.toDateString() === now.toDateString()) {
+    return d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+  }
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return "Ayer";
   return d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
 }
 
 function displayName(conv: ConvWithLastMsg) {
-  return conv.contact_name ?? conv.contact_phone.replace("whatsapp:", "");
+  if (conv.contact_name) return conv.contact_name;
+  if (conv.contact_phone.startsWith("instagram:")) {
+    const igUser = (conv.custom_fields as Record<string, string> | null)?.ig_username;
+    return igUser ? `@${igUser}` : conv.contact_phone.replace("instagram:", "");
+  }
+  return conv.contact_phone.replace("whatsapp:", "");
 }
 
 function previewText(conv: ConvWithLastMsg) {
   const msg = conv.last_message;
-  if (!msg) return "";
-  if (msg.media_type?.startsWith("image")) return "Imagen";
-  if (msg.media_type?.startsWith("audio")) return "Audio";
-  if (msg.media_type?.startsWith("video")) return "Video";
+  if (!msg) return "Sin mensajes";
+  if (msg.media_type?.startsWith("image")) return "📷 Imagen";
+  if (msg.media_type?.startsWith("audio")) return "🎤 Audio";
+  if (msg.media_type?.startsWith("video")) return "🎥 Video";
   return msg.body ?? "";
 }
 
@@ -47,27 +67,64 @@ function ThemeToggle() {
   return (
     <button
       onClick={() => setTheme(isDark ? "light" : "dark")}
-      className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors duration-200 cursor-pointer"
-      title={isDark ? "Cambiar a claro" : "Cambiar a oscuro"}
+      className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/30 transition-all duration-200 cursor-pointer"
+      title={isDark ? "Modo claro" : "Modo oscuro"}
     >
-      {isDark ? <Sun size={16} /> : <Moon size={16} />}
+      {isDark ? <Sun size={15} /> : <Moon size={15} />}
     </button>
+  );
+}
+
+function ContactAvatar({
+  name,
+  phone,
+  isInstagram = false,
+  size = "md",
+}: {
+  name: string | null;
+  phone: string;
+  isInstagram?: boolean;
+  size?: "sm" | "md" | "lg";
+}) {
+  const gradient = avatarGradient(phone);
+  const initials = nameInitials(name, phone);
+  const dim =
+    size === "lg" ? "w-13 h-13 text-sm" :
+    size === "sm" ? "w-9 h-9 text-xs" :
+    "w-12 h-12 text-sm";
+
+  return (
+    <div className="relative flex-shrink-0">
+      <div
+        className={`${dim} rounded-full flex items-center justify-center text-white font-bold shadow-md`}
+        style={{ background: gradient }}
+      >
+        {initials}
+      </div>
+      {isInstagram ? (
+        <span className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-[#0F0B1F] flex items-center justify-center bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400">
+          <svg viewBox="0 0 24 24" fill="white" width="7" height="7"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>
+        </span>
+      ) : (
+        <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-white dark:border-[#0F0B1F] flex-shrink-0" />
+      )}
+    </div>
   );
 }
 
 function StatusBadge({ conv }: { conv: ConvWithLastMsg }) {
   if (conv.paused_reason === "derived_to_human") {
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-600 dark:text-violet-400">
-        <AlertCircle size={9} />
+      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
+        <AlertCircle size={8} />
         Derivado
       </span>
     );
   }
   if (conv.automation_paused) {
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
-        <Hand size={9} />
+      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+        <Hand size={8} />
         Manual
       </span>
     );
@@ -75,26 +132,21 @@ function StatusBadge({ conv }: { conv: ConvWithLastMsg }) {
   return null;
 }
 
-function ChatListSkeleton() {
+function SkeletonList() {
   return (
-    <div className="space-y-1 p-2">
+    <div className="space-y-1 px-3 py-2">
       {[0, 1, 2, 3, 4].map((i) => (
-        <div key={i} className="flex items-center gap-3 p-3 rounded-xl">
-          <Skeleton className="h-11 w-11 rounded-full flex-shrink-0" />
+        <div key={i} className="flex items-center gap-3 px-3 py-4 rounded-2xl">
+          <Skeleton className="h-12 w-12 rounded-full flex-shrink-0" />
           <div className="flex-1 space-y-2">
             <Skeleton className="h-3.5 w-3/4 rounded" />
             <Skeleton className="h-3 w-1/2 rounded" />
           </div>
-          <Skeleton className="h-3 w-10 rounded" />
+          <Skeleton className="h-3 w-8 rounded" />
         </div>
       ))}
     </div>
   );
-}
-
-interface Props {
-  selectedId: string | null;
-  onSelect: (conv: ConvWithLastMsg) => void;
 }
 
 function ConvItem({
@@ -106,57 +158,60 @@ function ConvItem({
   isSelected: boolean;
   onSelect: (c: ConvWithLastMsg) => void;
 }) {
-  const color    = avatarColor(conv.contact_phone);
-  const initials = phoneInitials(conv.contact_phone);
-  const name     = displayName(conv);
+  const name = displayName(conv);
+  const preview = previewText(conv);
   const firstTag = conv.tags?.[0] ?? null;
 
   return (
     <button
       onClick={() => onSelect(conv)}
       className={`
-        w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left
+        w-full flex items-center gap-3.5 px-3 py-3.5 rounded-2xl text-left
         transition-all duration-200 cursor-pointer
         ${isSelected
-          ? "bg-primary/10 shadow-sm"
-          : "hover:bg-muted hover:scale-[1.005]"
+          ? "bg-violet-50 border border-violet-200 shadow-sm dark:bg-violet-900/20 dark:border-violet-800"
+          : "hover:bg-white hover:shadow-md dark:hover:bg-white/5 border border-transparent hover:border-gray-100 dark:hover:border-white/10"
         }
       `}
     >
-      {/* Avatar */}
-      <div
-        className="w-11 h-11 rounded-full flex items-center justify-center text-white text-[13px] font-semibold flex-shrink-0 shadow-sm"
-        style={{ backgroundColor: color }}
-      >
-        {initials}
-      </div>
+      <ContactAvatar name={conv.contact_name} phone={conv.contact_phone} isInstagram={conv.channel === "instagram"} />
 
-      {/* Content */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-1 mb-0.5">
-          <span className={`text-sm font-semibold truncate ${isSelected ? "text-primary" : "text-foreground"}`}>
+        {/* Row 1: name + time */}
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <span className={`text-[14.5px] font-semibold truncate leading-tight ${isSelected ? "text-violet-700 dark:text-violet-300" : "text-gray-900 dark:text-gray-100"}`}>
             {name}
           </span>
-          <span className="text-[11px] text-muted-foreground flex-shrink-0 font-mono tabular-nums">
+          <span className="text-[11px] text-gray-400 tabular-nums flex-shrink-0">
             {formatTime(conv.last_message_at)}
           </span>
         </div>
 
-        <div className="flex items-center justify-between gap-1">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-xs text-muted-foreground truncate">
-              {previewText(conv)}
-            </span>
-            {firstTag && (
-              <span className="inline-flex items-center text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary flex-shrink-0">
+        {/* Row 2: preview + badges */}
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[12.5px] text-gray-400 dark:text-gray-500 truncate flex-1">
+            {preview}
+          </span>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <StatusBadge conv={conv} />
+            {firstTag && !conv.automation_paused && (
+              <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-300">
                 {firstTag}
               </span>
             )}
-          </div>
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <StatusBadge conv={conv} />
+            {/* Deal status dot */}
+            {(() => {
+              const dot = DEAL_DOT[conv.deal_status] ?? DEAL_DOT["nuevo"];
+              return (
+                <span
+                  title={dot.label}
+                  className="w-2 h-2 rounded-full flex-shrink-0 ring-1 ring-white dark:ring-[#0F0B1F]"
+                  style={{ backgroundColor: dot.color }}
+                />
+              );
+            })()}
             {conv.unread_count > 0 && (
-              <span className="bg-primary text-primary-foreground text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 animate-in zoom-in duration-200">
+              <span className="bg-violet-600 text-white text-[10px] font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1.5 shadow-sm shadow-violet-200 dark:shadow-none">
                 {conv.unread_count > 9 ? "9+" : conv.unread_count}
               </span>
             )}
@@ -167,9 +222,15 @@ function ConvItem({
   );
 }
 
+interface Props {
+  selectedId: string | null;
+  onSelect: (conv: ConvWithLastMsg) => void;
+}
+
 export function ChatList({ selectedId, onSelect }: Props) {
   const [conversations, setConversations] = useState<ConvWithLastMsg[]>([]);
   const [search, setSearch] = useState("");
+  const [tab, setTab] = useState<Tab>("all");
   const [loading, setLoading] = useState(true);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -180,7 +241,7 @@ export function ChatList({ selectedId, onSelect }: Props) {
       const data: unknown = await res.json();
       setConversations(Array.isArray(data) ? (data as ConvWithLastMsg[]) : []);
     } catch (e) {
-      console.error("[ChatList] fetch error:", e);
+      console.error("[ChatList]", e);
       setConversations([]);
     } finally {
       setLoading(false);
@@ -199,104 +260,117 @@ export function ChatList({ selectedId, onSelect }: Props) {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  const filtered = conversations.filter((c) =>
+  const unreadCount  = conversations.filter((c) => c.unread_count > 0).length;
+  const derivedCount = conversations.filter((c) => c.paused_reason === "derived_to_human").length;
+
+  const searched = conversations.filter((c) =>
     displayName(c).toLowerCase().includes(search.toLowerCase())
   );
+  const filtered = searched.filter((c) => {
+    if (tab === "unread")     return c.unread_count > 0;
+    if (tab === "unassigned") return c.paused_reason === "derived_to_human";
+    return true;
+  });
 
-  // Admin chat siempre primero
   const adminConvs   = filtered.filter((c) => c.is_admin);
   const regularConvs = filtered.filter((c) => !c.is_admin);
 
   return (
-    <div className="flex flex-col h-full bg-background border-r border-border">
+    <div className="flex flex-col h-full bg-white dark:bg-[#0F0B1F]">
       {/* ── Header ── */}
-      <div className="flex items-center justify-between px-4 py-3.5 border-b border-border">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
-            <Bot size={14} className="text-primary-foreground" />
-          </div>
-          <div>
-            <span className="font-display text-[15px] font-bold text-foreground tracking-tight leading-none">
-              Fenoma
-            </span>
-            <span className="block text-[10px] text-muted-foreground leading-none mt-0.5">
-              WhatsApp Agent
-            </span>
-          </div>
+      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-[#2D2A45] bg-white dark:bg-[#1A1530]">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">
+            Conversaciones
+          </h2>
+          {conversations.length > 0 && (
+            <p className="text-[11px] text-gray-400 mt-0.5">{conversations.length} chats</p>
+          )}
         </div>
         <ThemeToggle />
       </div>
 
+      {/* ── Tabs ── */}
+      <div className="flex items-center gap-1 px-4 pt-3 pb-0">
+        {([
+          { key: "all",        label: "Todas",       count: conversations.length },
+          { key: "unread",     label: "No leídas",   count: unreadCount },
+          { key: "unassigned", label: "Derivadas",   count: derivedCount },
+        ] as { key: Tab; label: string; count: number }[]).map(({ key, label, count }) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={`
+              flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-all duration-200 cursor-pointer
+              ${tab === key
+                ? "text-violet-700 bg-violet-100 dark:bg-violet-900/40 dark:text-violet-300"
+                : "text-gray-500 hover:text-violet-600 hover:bg-violet-50 dark:text-gray-400 dark:hover:bg-violet-900/20"
+              }
+            `}
+          >
+            {label}
+            {count > 0 && (
+              <span className={`text-[10px] font-bold min-w-[16px] h-4 flex items-center justify-center rounded-full px-1 ${
+                tab === key
+                  ? "bg-violet-600 text-white"
+                  : "bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400"
+              }`}>
+                {count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
       {/* ── Search ── */}
-      <div className="px-3 py-2.5">
-        <div className="flex items-center gap-2 bg-muted rounded-xl px-3 py-2 transition-all duration-200 focus-within:ring-2 focus-within:ring-primary/30 focus-within:bg-card">
-          <Search size={14} className="text-muted-foreground flex-shrink-0" />
+      <div className="px-4 py-3">
+        <div className="flex items-center gap-2.5 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-2xl px-3.5 py-2.5 shadow-sm transition-all duration-200 focus-within:ring-2 focus-within:ring-violet-300 focus-within:border-violet-300 focus-within:bg-white dark:focus-within:bg-white/10">
+          <Search size={14} className="text-gray-400 flex-shrink-0" />
           <input
             ref={searchRef}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar conversaciones…"
-            className="bg-transparent text-foreground text-sm placeholder:text-muted-foreground outline-none flex-1 min-w-0"
+            className="bg-transparent text-gray-800 dark:text-gray-100 text-[13.5px] placeholder:text-gray-400 outline-none flex-1 min-w-0"
           />
         </div>
       </div>
 
-      {/* ── Lista ── */}
+      {/* ── List ── */}
       <div className="flex-1 overflow-y-auto">
         {loading ? (
-          <ChatListSkeleton />
+          <SkeletonList />
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center pt-16 gap-2">
-            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-              <Search size={16} className="text-muted-foreground" />
+          <div className="flex flex-col items-center justify-center pt-16 gap-3">
+            <div className="w-12 h-12 rounded-full bg-violet-50 dark:bg-violet-900/20 flex items-center justify-center">
+              <Search size={18} className="text-violet-400" />
             </div>
-            <p className="text-sm text-muted-foreground">Sin conversaciones</p>
+            <div className="text-center">
+              <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Sin resultados</p>
+              <p className="text-xs text-gray-400 mt-0.5">Probá otro filtro o búsqueda</p>
+            </div>
           </div>
         ) : (
-          <div className="p-2 space-y-0.5">
-            {/* Admin chats — sticky section */}
+          <div className="px-3 py-2 space-y-1">
+            {/* Admin chats */}
             {adminConvs.length > 0 && (
               <>
-                <div className="flex items-center gap-1.5 px-3 py-1">
-                  <Star size={10} className="text-violet-500" />
-                  <span className="text-[10px] font-semibold text-violet-500 uppercase tracking-wider">
-                    Admin
-                  </span>
+                <div className="flex items-center gap-1.5 px-2 py-1.5 mt-1">
+                  <Star size={9} className="text-violet-500" />
+                  <span className="text-[10px] font-bold text-violet-500 uppercase tracking-widest">Admin</span>
                 </div>
                 {adminConvs.map((conv) => (
-                  <div key={conv.id} className="relative">
-                    {/* Admin badge overlay */}
-                    <div className="absolute left-3 top-3 z-10">
-                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-600 dark:text-violet-400 border border-violet-500/20">
-                        <Star size={8} />
-                        Admin
-                      </span>
-                    </div>
-                    <ConvItem
-                      conv={conv}
-                      isSelected={selectedId === conv.id}
-                      onSelect={onSelect}
-                    />
-                  </div>
+                  <ConvItem key={conv.id} conv={conv} isSelected={selectedId === conv.id} onSelect={onSelect} />
                 ))}
                 {regularConvs.length > 0 && (
-                  <div className="flex items-center gap-1.5 px-3 py-1 mt-1">
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                      Clientes
-                    </span>
+                  <div className="flex items-center gap-1.5 px-2 py-1.5 mt-2">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Clientes</span>
                   </div>
                 )}
               </>
             )}
-
-            {/* Regular chats */}
             {regularConvs.map((conv) => (
-              <ConvItem
-                key={conv.id}
-                conv={conv}
-                isSelected={selectedId === conv.id}
-                onSelect={onSelect}
-              />
+              <ConvItem key={conv.id} conv={conv} isSelected={selectedId === conv.id} onSelect={onSelect} />
             ))}
           </div>
         )}

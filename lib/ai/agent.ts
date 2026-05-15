@@ -2,14 +2,52 @@ import Anthropic from "@anthropic-ai/sdk";
 import { adminClient } from "@/lib/supabase/admin";
 import { getMessagingProvider } from "@/lib/messaging";
 import { getTenantCatalog } from "./business-context";
-import { buildImageContentBlock, buildAudioText } from "./media-handler";
+import { buildImageContentBlock, buildAudioText, transcribePendingAudio } from "./media-handler";
 import { TOOL_DEFINITIONS, type DeriveToHumanInput, type GetCatalogInput } from "./tools";
+import { generateAudio } from "@/lib/tts/elevenlabs";
+import { uploadAudio } from "@/lib/tts/storage";
 import type { Conversation, Message, Tenant } from "@/types/database.types";
 
 const MAX_HISTORY_MESSAGES = 30;
 const MODEL = "claude-sonnet-4-5";
+const FALLBACK_MODEL = "claude-haiku-4-5-20251001";
+const RETRY_DELAYS_MS = [1_000, 3_000, 9_000];
+
+// Appended to every tenant's system prompt — non-negotiable behavioral rule
+const AGENT_BASE_RULES = `
+
+REGLA CRÍTICA DE CONVERSACIÓN: Nunca te despidas ni cierres la conversación a menos que el cliente diga explícitamente "gracias", "chau", "listo", "hasta luego" o algo equivalente. Si el cliente está consultando, respondé la consulta — no asumas que terminó.`;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// Retries on 529/503 with exponential backoff; falls back to Haiku if Sonnet is exhausted.
+async function callClaude(
+  params: Omit<Anthropic.MessageCreateParamsNonStreaming, "model">
+): Promise<Anthropic.Message> {
+  for (const [modelIdx, model] of [MODEL, FALLBACK_MODEL].entries()) {
+    const isLastModel = modelIdx === 1;
+    for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+      try {
+        return await anthropic.messages.create({ ...params, model });
+      } catch (err) {
+        const status = (err as { status?: number }).status;
+        const isOverload = status === 529 || status === 503;
+
+        if (isOverload && attempt < RETRY_DELAYS_MS.length) {
+          console.warn(`[agent] ${status} (${model}) attempt ${attempt + 1}, retrying in ${RETRY_DELAYS_MS[attempt]}ms`);
+          await new Promise<void>((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]));
+          continue;
+        }
+        if (isOverload && !isLastModel) {
+          console.warn(`[agent] ${status} on ${model} exhausted — falling back to ${FALLBACK_MODEL}`);
+          break;
+        }
+        throw err;
+      }
+    }
+  }
+  throw new Error("[agent] All Claude API attempts exhausted");
+}
 
 // ── Construcción del historial ────────────────────────────────────────────────
 
@@ -113,21 +151,24 @@ export async function runAgent(
   conversation: Conversation,
   tenant: Tenant
 ): Promise<AgentResult> {
-  // 1. Cargar historial de mensajes
+  // 1. Cargar historial de mensajes (los más recientes, en orden cronológico)
   const { data: rawMessages } = await adminClient
     .from("messages")
     .select("*")
     .eq("conversation_id", conversation.id)
-    .order("created_at", { ascending: true })
+    .order("created_at", { ascending: false })
     .limit(MAX_HISTORY_MESSAGES);
 
-  const messages = rawMessages ?? [];
+  const messages = (rawMessages ?? []).reverse();
 
   if (messages.length === 0) {
     return { responseText: null, derivedToHuman: false, promptTokens: 0, completionTokens: 0, toolCallsLog: [] };
   }
 
-  // 2. Construir historial para Claude
+  // 2. Transcribir audios pendientes antes de construir el historial
+  await transcribePendingAudio(messages);
+
+  // 3. Construir historial para Claude
   const messageHistory = await buildMessageHistory(messages);
 
   // Asegurarse de que el último turno sea del usuario
@@ -135,7 +176,7 @@ export async function runAgent(
     return { responseText: null, derivedToHuman: false, promptTokens: 0, completionTokens: 0, toolCallsLog: [] };
   }
 
-  // 3. Loop de tool calling
+  // 4. Loop de tool calling
   const ctx: ToolContext = {
     tenant,
     conversationId: conversation.id,
@@ -150,10 +191,9 @@ export async function runAgent(
   const loopMessages: Anthropic.MessageParam[] = [...messageHistory];
 
   for (let iteration = 0; iteration < 10; iteration++) {
-    const response = await anthropic.messages.create({
-      model: MODEL,
+    const response = await callClaude({
       max_tokens: 4096,
-      system: tenant.agent_system_prompt,
+      system: (tenant.agent_system_prompt ?? "") + AGENT_BASE_RULES,
       tools: TOOL_DEFINITIONS,
       messages: loopMessages,
     });
@@ -215,6 +255,28 @@ export async function runAgent(
   };
 }
 
+// ── TTS helpers ───────────────────────────────────────────────────────────────
+
+function lastInboundWasAudio(messages: Message[]): boolean {
+  // messages come newest-first from the query
+  const inbound = messages.find((m) => m.direction === "inbound");
+  return !!inbound?.media_type?.startsWith("audio");
+}
+
+async function buildAudioResponse(
+  text: string,
+  conversationId: string
+): Promise<string | null> {
+  try {
+    const audio = await generateAudio(text);
+    const filename = `${conversationId}/${Date.now()}.mp3`;
+    return await uploadAudio(audio, filename);
+  } catch (err) {
+    console.error("[agent] TTS/upload failed, falling back to text:", (err as Error).message);
+    return null;
+  }
+}
+
 // ── Envío de respuesta y logging ──────────────────────────────────────────────
 
 export async function processConversation(
@@ -255,8 +317,24 @@ export async function processConversation(
     return { sent: false, derivedToHuman: false };
   }
 
+  // Detectar si el último inbound fue audio (antes de runAgent para no re-cargar)
+  const { data: recentMsgs } = await adminClient
+    .from("messages")
+    .select("direction, media_type")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: false })
+    .limit(MAX_HISTORY_MESSAGES);
+
+  const clientSentAudio =
+    !!process.env.ELEVENLABS_API_KEY &&
+    lastInboundWasAudio((recentMsgs ?? []) as Message[]);
+
   // Ejecutar agente
   const result = await runAgent(conversation, tenant);
+
+  // No responder con audio si el agente consultó el catálogo (lista larga = mejor texto)
+  const usedCatalog = result.toolCallsLog.some((t) => t.name === "get_catalog");
+  const respondWithAudio = clientSentAudio && !usedCatalog;
 
   const latencyMs = Date.now() - startMs;
 
@@ -276,6 +354,11 @@ export async function processConversation(
     return { sent: false, derivedToHuman: result.derivedToHuman };
   }
 
+  // Generar audio si corresponde
+  const audioUrl = respondWithAudio
+    ? await buildAudioResponse(result.responseText, conversationId)
+    : null;
+
   // Guardar mensaje outbound en DB
   const { data: savedMessage } = await adminClient
     .from("messages")
@@ -285,6 +368,8 @@ export async function processConversation(
       direction: "outbound",
       sender: "ai",
       body: result.responseText,
+      media_url: audioUrl ?? null,
+      media_type: audioUrl ? "audio/mpeg" : null,
       status: "queued",
     })
     .select("id")
@@ -296,7 +381,8 @@ export async function processConversation(
     const { sid, status } = await messaging.send({
       from: tenant.whatsapp_number,
       to: conversation.contact_phone,
-      body: result.responseText,
+      body: audioUrl ? "" : result.responseText,
+      ...(audioUrl ? { mediaUrl: audioUrl } : {}),
     });
 
     if (savedMessage) {

@@ -1,20 +1,21 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans, Space_Grotesk } from "next/font/google";
+import { Plus_Jakarta_Sans, Fraunces } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
-const jakarta = Plus_Jakarta_Sans({
+const plusJakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
   variable: "--font-jakarta",
-  weight: ["400", "500", "600", "700"],
+  weight: ["400", "500", "600", "700", "800"],
   display: "swap",
 });
 
-const grotesk = Space_Grotesk({
+const fraunces = Fraunces({
   subsets: ["latin"],
-  variable: "--font-grotesk",
-  weight: ["700"],
+  variable: "--font-fraunces",
+  weight: ["400", "600", "700"],
+  style: ["normal", "italic"],
   display: "swap",
 });
 
@@ -28,7 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="es"
       suppressHydrationWarning
-      className={`${jakarta.variable} ${grotesk.variable} h-full`}
+      className={`${fraunces.variable} ${plusJakarta.variable} h-full`}
     >
       <body className="h-full font-sans antialiased">
         <ThemeProvider>

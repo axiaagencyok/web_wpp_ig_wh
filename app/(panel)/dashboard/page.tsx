@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { NavSidebar } from "@/components/panel/NavSidebar";
 import { ChatList } from "@/components/panel/ChatList";
 import { ChatWindow } from "@/components/panel/ChatWindow";
+import { MessageSquare } from "lucide-react";
 import type { Conversation } from "@/types/database.types";
 
 type ConvWithLastMsg = Conversation & {
@@ -31,24 +33,26 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex h-full bg-background overflow-hidden">
-      {/* ── Sidebar ── */}
+    <div className="flex h-full overflow-hidden bg-[#F8F7FF] dark:bg-[#0F0B1F]">
+      {/* ── Narrow icon nav (desktop only) ── */}
+      <NavSidebar />
+
+      {/* ── Conversation list ── */}
       <div
         className={`
-          flex-shrink-0 w-full md:w-[340px] lg:w-[380px]
-          md:flex flex-col
+          flex-shrink-0 w-full md:w-[320px] lg:w-[340px]
+          md:flex flex-col border-r border-gray-100 dark:border-[#2D2A45]
           ${selected ? "hidden md:flex" : "flex"}
         `}
       >
         <ChatList selectedId={selected?.id ?? null} onSelect={handleSelect} />
       </div>
 
-      {/* ── Main area ── */}
+      {/* ── Main chat area ── */}
       <div
         className={`
-          flex-1 min-w-0
+          flex-1 min-w-0 flex-col
           ${selected ? "flex" : "hidden md:flex"}
-          flex-col
         `}
       >
         {selected ? (
@@ -68,36 +72,38 @@ export default function DashboardPage() {
 
 function EmptyState() {
   return (
-    <div className="flex flex-col items-center justify-center h-full gap-6 bg-muted/20 select-none">
-      {/* Geometric SVG illustration */}
-      <div className="relative">
-        <svg width="120" height="100" viewBox="0 0 120 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-          {/* Main bubble */}
-          <rect x="8" y="10" width="90" height="64" rx="16" className="fill-primary/10 stroke-primary/20" strokeWidth="1.5" />
-          {/* Dots inside bubble */}
-          <circle cx="35" cy="42" r="5" className="fill-primary/40" />
-          <circle cx="53" cy="42" r="5" className="fill-primary/60" />
-          <circle cx="71" cy="42" r="5" className="fill-primary/40" />
-          {/* Tail */}
-          <path d="M20 74 L8 88 L32 74" className="fill-primary/10 stroke-primary/20" strokeWidth="1.5" strokeLinejoin="round" />
-          {/* Reply bubble (accent) */}
-          <rect x="42" y="68" width="70" height="28" rx="10" className="fill-accent/10 stroke-accent/20" strokeWidth="1.5" />
-          <circle cx="62" cy="82" r="3.5" className="fill-accent/40" />
-          <circle cx="77" cy="82" r="3.5" className="fill-accent/60" />
-          <circle cx="92" cy="82" r="3.5" className="fill-accent/40" />
-        </svg>
-      </div>
+    <div className="flex flex-col items-center justify-center h-full gap-8 bg-[#F8F5EF] dark:bg-[#0A0818] select-none px-6">
+      <div className="flex flex-col items-center gap-5">
+        {/* Icon container */}
+        <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center shadow-[0_12px_40px_rgba(124,58,237,0.30)]">
+          <MessageSquare size={36} className="text-white" strokeWidth={1.5} />
+        </div>
 
-      <div className="text-center space-y-1.5 max-w-xs">
-        <p className="font-display text-lg font-bold text-foreground tracking-tight">
-          Fenoma
-        </p>
-        <p className="text-sm font-medium text-foreground/70">
-          Seleccioná una conversación
-        </p>
-        <p className="text-xs text-muted-foreground">
-          Tus chats de WhatsApp aparecen en el panel izquierdo
-        </p>
+        {/* Text */}
+        <div className="text-center space-y-2">
+          <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 tracking-tight">
+            Seleccioná una conversación
+          </h2>
+          <p className="text-[15px] text-gray-400 dark:text-gray-500 max-w-xs leading-relaxed">
+            Tus chats de WhatsApp aparecerán acá para que puedas responder más rápido.
+          </p>
+        </div>
+
+        {/* Subtle brand mark */}
+        <div className="flex items-center gap-2 mt-2 opacity-30 dark:opacity-20">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/brand/Fenoma%20Simbolo%20PNG.png"
+            alt=""
+            width={18}
+            height={18}
+            className="object-contain dark:invert"
+            aria-hidden="true"
+          />
+          <span className="font-display text-sm font-semibold text-gray-600 dark:text-gray-300 italic">
+            Fenoma
+          </span>
+        </div>
       </div>
     </div>
   );

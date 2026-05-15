@@ -2,11 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { z } from "zod";
 
+const DEAL_STATUSES = ["nuevo", "contactado", "esperando_pago", "pago_pendiente", "cerrado"] as const;
+
 const patchSchema = z.object({
   contact_name:  z.string().max(120).nullable().optional(),
   contact_email: z.string().email().max(254).nullable().optional(),
   notes:         z.string().max(4000).nullable().optional(),
   tags:          z.array(z.string().max(40)).max(20).optional(),
+  deal_status:   z.enum(DEAL_STATUSES).optional(),
 });
 
 export async function PATCH(
@@ -33,12 +36,11 @@ export async function PATCH(
 
     const { id } = await params;
 
-    // RLS garantiza que solo puede editar conversaciones del propio tenant
     const { data, error } = await supabase
       .from("conversations")
       .update(parsed.data)
       .eq("id", id)
-      .select("id, contact_name, contact_email, notes, tags")
+      .select("id, contact_name, contact_email, notes, tags, deal_status")
       .single();
 
     if (error) {

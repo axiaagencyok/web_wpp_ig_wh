@@ -16,19 +16,18 @@ function formatTime(iso: string) {
 }
 
 function StatusTick({ status }: { status: Message["status"] }) {
-  const base = "flex-shrink-0";
-  if (status === "queued")    return <Clock size={11} className={`${base} text-white/50`} />;
-  if (status === "sent")      return <Check size={11} className={`${base} text-white/60`} />;
-  if (status === "delivered") return <CheckCheck size={11} className={`${base} text-white/60`} />;
-  if (status === "read")      return <CheckCheck size={11} className={`${base} text-white`} />;
-  if (status === "failed")    return <X size={11} className={`${base} text-red-300`} />;
+  if (status === "queued")    return <Clock size={11} className="flex-shrink-0 text-violet-300" />;
+  if (status === "sent")      return <Check size={11} className="flex-shrink-0 text-violet-400/70" />;
+  if (status === "delivered") return <CheckCheck size={11} className="flex-shrink-0 text-violet-400" />;
+  if (status === "read")      return <CheckCheck size={11} className="flex-shrink-0 text-violet-600" />;
+  if (status === "failed")    return <X size={11} className="flex-shrink-0 text-red-400" />;
   return null;
 }
 
 function SenderPill({ sender }: { sender: Message["sender"] }) {
   if (sender === "ai") {
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-white/20 text-white/80">
+      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-300">
         <Bot size={9} />
         IA
       </span>
@@ -36,7 +35,7 @@ function SenderPill({ sender }: { sender: Message["sender"] }) {
   }
   if (sender === "human") {
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-white/20 text-white/80">
+      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-300">
         <User size={9} />
         Vos
       </span>
@@ -50,13 +49,13 @@ export function MessageBubble({ message }: Props) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 6 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.18, ease: "easeOut" }}
+      transition={{ duration: 0.2, ease: "easeOut" }}
       className={`flex ${isOutbound ? "justify-end" : "justify-start"} px-4`}
     >
-      <div className={`max-w-[72%] ${isOutbound ? "items-end" : "items-start"} flex flex-col gap-0.5`}>
-        {/* Sender pill (outbound only, above bubble) */}
+      <div className={`max-w-[72%] ${isOutbound ? "items-end" : "items-start"} flex flex-col gap-1`}>
+        {/* Sender pill (outbound only) */}
         {isOutbound && (
           <div className="px-1">
             <SenderPill sender={message.sender} />
@@ -65,24 +64,25 @@ export function MessageBubble({ message }: Props) {
 
         <div
           className={`
-            relative px-3.5 py-2.5 shadow-sm
+            relative px-4 py-3 shadow-sm
             ${isOutbound
-              ? "bg-primary text-primary-foreground rounded-2xl rounded-br-md"
-              : "bg-card border border-border text-foreground rounded-2xl rounded-bl-md"
+              ? "bg-gradient-to-br from-violet-500 to-violet-600 text-white rounded-2xl rounded-br-sm"
+              : "bg-white dark:bg-[#1E1B2E] border border-gray-100 dark:border-[#2D2A45] text-gray-800 dark:text-gray-100 rounded-2xl rounded-bl-sm shadow-[0_2px_12px_rgba(17,24,39,0.06)]"
             }
           `}
         >
           {/* Image */}
           {message.media_url && message.media_type?.startsWith("image") && (
+            /* eslint-disable-next-line @next/next/no-img-element */
             <img
               src={message.media_url}
               alt="media"
-              className="rounded-lg max-w-[240px] mb-2 block"
+              className="rounded-xl max-w-[240px] mb-2 block"
               loading="lazy"
             />
           )}
 
-          {/* Image placeholder (no URL yet) */}
+          {/* Image placeholder */}
           {!message.media_url && message.media_type?.startsWith("image") && (
             <div className="flex items-center gap-2 mb-2 opacity-60">
               <ImageIcon size={16} />
@@ -93,8 +93,8 @@ export function MessageBubble({ message }: Props) {
           {/* Audio */}
           {message.media_type?.startsWith("audio") && (
             <div className="flex items-center gap-2 mb-2">
-              <Mic size={14} className={isOutbound ? "text-primary-foreground/70" : "text-muted-foreground"} />
-              <span className={`text-xs italic ${isOutbound ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
+              <Mic size={14} className={isOutbound ? "text-white/70" : "text-gray-400"} />
+              <span className={`text-xs italic ${isOutbound ? "text-white/80" : "text-gray-500"}`}>
                 {message.transcription ? `"${message.transcription}"` : "Audio"}
               </span>
             </div>
@@ -102,14 +102,14 @@ export function MessageBubble({ message }: Props) {
 
           {/* Body */}
           {message.body && (
-            <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+            <p className={`text-[15px] leading-relaxed whitespace-pre-wrap break-words ${isOutbound ? "text-white" : "text-gray-800 dark:text-gray-100"}`}>
               {message.body}
             </p>
           )}
 
           {/* Footer: timestamp + ticks */}
-          <div className={`flex items-center gap-1 mt-1 ${isOutbound ? "justify-end" : "justify-end"}`}>
-            <span className={`text-[10px] tabular-nums ${isOutbound ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
+          <div className="flex items-center justify-end gap-1 mt-1.5">
+            <span className={`text-[10px] tabular-nums ${isOutbound ? "text-white/60" : "text-gray-400"}`}>
               {formatTime(message.created_at)}
             </span>
             {isOutbound && <StatusTick status={message.status} />}

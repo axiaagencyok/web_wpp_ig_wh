@@ -1,4 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
+import { adminClient } from "@/lib/supabase/admin";
+import { getTranscriptionProvider } from "@/lib/transcription";
+import type { Message } from "@/types/database.types";
 
 const SUPPORTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 
@@ -71,4 +74,43 @@ export function buildAudioText(transcription: string | null): string {
     return `[Audio transcripto]: ${transcription}`;
   }
   return "[El cliente envió un audio que no pudo transcribirse automáticamente]";
+}
+
+/**
+ * Transcribe todos los mensajes de audio de una conversación que aún no tienen
+ * transcripción, guardando el resultado en la DB. Se llama antes de buildMessageHistory.
+ */
+export async function transcribePendingAudio(messages: Message[]): Promise<void> {
+  const audioMessages = messages.filter(
+    (m) => m.media_type?.startsWith("audio") && m.media_url && !m.transcription
+  );
+
+  if (audioMessages.length === 0) return;
+
+  let provider: ReturnType<typeof getTranscriptionProvider>;
+  try {
+    provider = getTranscriptionProvider();
+  } catch {
+    console.warn("[transcribe] OPENAI_API_KEY no configurado, omitiendo transcripción");
+    return;
+  }
+
+  await Promise.all(
+    audioMessages.map(async (msg) => {
+      const downloaded = await downloadTwilioMedia(msg.media_url!);
+      if (!downloaded) return;
+
+      try {
+        const text = await provider.transcribe(downloaded.buffer, downloaded.contentType);
+        await adminClient
+          .from("messages")
+          .update({ transcription: text })
+          .eq("id", msg.id);
+        // Mutate in-place so buildMessageHistory sees the result without a re-fetch
+        msg.transcription = text;
+      } catch (e) {
+        console.error(`[transcribe] Error transcribiendo mensaje ${msg.id}:`, (e as Error).message);
+      }
+    })
+  );
 }

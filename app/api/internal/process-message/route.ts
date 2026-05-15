@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminClient } from "@/lib/supabase/admin";
 import { processConversation } from "@/lib/ai/agent";
 import { processAdminConversation } from "@/lib/ai/admin-agent";
+import { processCamiConversation } from "@/lib/instagram/cami-agent";
 import { z } from "zod";
 
 function isAuthorized(req: NextRequest): boolean {
@@ -31,16 +32,21 @@ export async function POST(req: NextRequest) {
   const { conversationId } = parsed.data;
 
   try {
-    // Determine if this is an admin conversation to route to the correct agent
+    // Route to the correct agent based on conversation type
     const { data: conv } = await adminClient
       .from("conversations")
-      .select("is_admin")
+      .select("is_admin, channel")
       .eq("id", conversationId)
       .single();
 
     if (conv?.is_admin) {
       await processAdminConversation(conversationId);
       return NextResponse.json({ ok: true, agent: "admin" });
+    }
+
+    if (conv?.channel === "instagram") {
+      await processCamiConversation(conversationId);
+      return NextResponse.json({ ok: true, agent: "cami" });
     }
 
     const result = await processConversation(conversationId);
