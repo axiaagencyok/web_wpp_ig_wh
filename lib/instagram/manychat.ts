@@ -28,10 +28,11 @@ export async function sendInstagramMessage(
     }),
   });
 
+  const resBody = await res.text().catch(() => "");
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`ManyChat sendContent failed ${res.status}: ${body}`);
+    throw new Error(`ManyChat sendContent failed ${res.status}: ${resBody}`);
   }
+  console.log(`[manychat] sendContent OK for subscriber ${subscriberId}:`, resBody.slice(0, 200));
 }
 
 export async function pauseInstagramBot(subscriberId: string): Promise<void> {

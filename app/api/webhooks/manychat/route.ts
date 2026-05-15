@@ -123,6 +123,8 @@ export async function POST(req: NextRequest) {
     return new NextResponse("Bad Request", { status: 400 });
   }
 
+  console.log("[ig-webhook] Received payload:", JSON.stringify(body).slice(0, 300));
+
   after(async () => {
     try {
       await processIncoming(body as ManyChatPayload);
