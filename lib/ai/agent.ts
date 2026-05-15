@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { adminClient } from "@/lib/supabase/admin";
+import { LUCAS_SYSTEM_PROMPT } from "./lucas-prompt";
 import { getMessagingProvider } from "@/lib/messaging";
 import { getTenantCatalog } from "./business-context";
 import { buildImageContentBlock, buildAudioText, transcribePendingAudio } from "./media-handler";
@@ -193,7 +194,7 @@ export async function runAgent(
   for (let iteration = 0; iteration < 10; iteration++) {
     const response = await callClaude({
       max_tokens: 4096,
-      system: (tenant.agent_system_prompt ?? "") + AGENT_BASE_RULES,
+      system: LUCAS_SYSTEM_PROMPT + AGENT_BASE_RULES,
       tools: TOOL_DEFINITIONS,
       messages: loopMessages,
     });
