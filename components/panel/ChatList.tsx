@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Search, Hand, Sun, Moon, Star, AlertCircle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { avatarGradient, nameInitials } from "@/lib/utils";
+import { toast } from "sonner";
 import type { Conversation } from "@/types/database.types";
 
 const DEAL_DOT: Record<Conversation["deal_status"], { color: string; label: string }> = {
@@ -236,6 +237,13 @@ export function ChatList({ selectedId, onSelect }: Props) {
   const [loading, setLoading] = useState(true);
   const searchRef = useRef<HTMLInputElement>(null);
 
+  // Track selectedId and current convs in refs so effects can access latest values
+  const selectedIdRef = useRef<string | null>(selectedId);
+  useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
+
+  const convsRef = useRef<ConvWithLastMsg[]>([]);
+  useEffect(() => { convsRef.current = conversations; }, [conversations]);
+
   async function load() {
     try {
       const res = await fetch("/api/chats");
@@ -250,17 +258,110 @@ export function ChatList({ selectedId, onSelect }: Props) {
     }
   }
 
+  // Request browser notification permission on mount
+  useEffect(() => {
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, []);
+
   useEffect(() => { load(); }, []);
+
+  // Polling fallback every 20 seconds in case realtime misses events
+  useEffect(() => {
+    const id = setInterval(() => load(), 20_000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     const supabase = createClient();
-    const channel = supabase
+
+    const sub = supabase
       .channel("conversations-list")
       .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => load())
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, () => load())
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages" },
+        (payload) => {
+          type MsgPayload = {
+            conversation_id: string;
+            direction: string;
+            body: string | null;
+            sender: string;
+            media_type: string | null;
+            created_at: string;
+          };
+          const msg = payload.new as MsgPayload;
+
+          // Optimistic update: move conversation to top, update preview, increment unread
+          setConversations((prev) => {
+            const updated = prev.map((c) => {
+              if (c.id !== msg.conversation_id) return c;
+              return {
+                ...c,
+                last_message_at: msg.created_at,
+                unread_count:
+                  msg.direction === "inbound" && c.id !== selectedIdRef.current
+                    ? c.unread_count + 1
+                    : c.unread_count,
+                last_message: {
+                  body: msg.body,
+                  sender: msg.sender,
+                  direction: msg.direction,
+                  media_type: msg.media_type,
+                },
+              };
+            });
+            return [...updated].sort(
+              (a, b) =>
+                new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()
+            );
+          });
+
+          // Show notification for new inbound messages not from the open chat
+          if (msg.direction === "inbound" && msg.conversation_id !== selectedIdRef.current) {
+            const conv = convsRef.current.find((c) => c.id === msg.conversation_id);
+            if (conv) {
+              const name = displayName(conv);
+              const body = msg.body
+                ? msg.body.slice(0, 80)
+                : msg.media_type?.startsWith("image")
+                ? "📷 Imagen"
+                : msg.media_type?.startsWith("audio")
+                ? "🎤 Audio"
+                : "Nuevo mensaje";
+
+              // Toast notification
+              toast(name, { description: body, duration: 5000 });
+
+              // Vibration (mobile)
+              if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+                navigator.vibrate(200);
+              }
+
+              // Browser notification
+              if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+                new Notification(name, { body, icon: "/favicon.ico", tag: conv.id });
+              }
+            }
+          }
+
+          // Full reload in background for authoritative data
+          load();
+        }
+      )
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+
+    return () => { supabase.removeChannel(sub); };
   }, []);
+
+  function handleSelect(conv: ConvWithLastMsg) {
+    // Optimistically clear the unread badge before the API confirms it
+    setConversations((prev) =>
+      prev.map((c) => (c.id === conv.id ? { ...c, unread_count: 0 } : c))
+    );
+    onSelect(conv);
+  }
 
   const byChannel = conversations.filter((c) => c.channel === channel);
 
@@ -390,7 +491,7 @@ export function ChatList({ selectedId, onSelect }: Props) {
                   <span className="text-[10px] font-bold text-violet-500 uppercase tracking-widest">Admin</span>
                 </div>
                 {adminConvs.map((conv) => (
-                  <ConvItem key={conv.id} conv={conv} isSelected={selectedId === conv.id} onSelect={onSelect} />
+                  <ConvItem key={conv.id} conv={conv} isSelected={selectedId === conv.id} onSelect={handleSelect} />
                 ))}
                 {regularConvs.length > 0 && (
                   <div className="flex items-center gap-1.5 px-2 py-1.5 mt-2">
@@ -400,7 +501,7 @@ export function ChatList({ selectedId, onSelect }: Props) {
               </>
             )}
             {regularConvs.map((conv) => (
-              <ConvItem key={conv.id} conv={conv} isSelected={selectedId === conv.id} onSelect={onSelect} />
+              <ConvItem key={conv.id} conv={conv} isSelected={selectedId === conv.id} onSelect={handleSelect} />
             ))}
           </div>
         )}

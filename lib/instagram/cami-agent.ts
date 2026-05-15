@@ -5,6 +5,8 @@ import { getCatalog, searchCatalogFullText } from "@/lib/google/sheets";
 import { sendInstagramMessage, pauseInstagramBot } from "./manychat";
 
 const MODEL = "claude-sonnet-4-5";
+const FALLBACK_MODEL = "claude-haiku-4-5-20251001";
+const RETRY_DELAYS_MS = [1_000, 3_000, 9_000];
 const CATALOG_SHEET_ID = process.env.INSTAGRAM_CATALOG_SHEET_ID ?? "1c7DpWjA7mi18Ii1oyqNnYqKALhOQDnRF1k7Bcfucm0Y";
 const CATALOG_RANGE = process.env.INSTAGRAM_CATALOG_RANGE ?? "Lista de Precios";
 const SUPERVISOR_EMAIL = process.env.SUPERVISOR_EMAIL ?? "axiaagencyok@gmail.com";
@@ -129,6 +131,35 @@ const TOOL_DEFINITIONS: Anthropic.Tool[] = [
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// Retries on 529/503 with exponential backoff; falls back to Haiku if Sonnet is exhausted.
+async function callClaude(
+  params: Omit<Anthropic.MessageCreateParamsNonStreaming, "model">
+): Promise<Anthropic.Message> {
+  for (const [modelIdx, model] of [MODEL, FALLBACK_MODEL].entries()) {
+    const isLastModel = modelIdx === 1;
+    for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+      try {
+        return await anthropic.messages.create({ ...params, model });
+      } catch (err) {
+        const status = (err as { status?: number }).status;
+        const isOverload = status === 529 || status === 503;
+
+        if (isOverload && attempt < RETRY_DELAYS_MS.length) {
+          console.warn(`[cami] ${status} (${model}) attempt ${attempt + 1}, retrying in ${RETRY_DELAYS_MS[attempt]}ms`);
+          await new Promise<void>((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]));
+          continue;
+        }
+        if (isOverload && !isLastModel) {
+          console.warn(`[cami] ${status} on ${model} exhausted — falling back to ${FALLBACK_MODEL}`);
+          break;
+        }
+        throw err;
+      }
+    }
+  }
+  throw new Error("[cami] All Claude API attempts exhausted");
+}
+
 async function getMailTransporter() {
   const host = process.env.SMTP_HOST;
   if (!host) return null;
@@ -243,12 +274,12 @@ export async function processCamiConversation(conversationId: string): Promise<v
   let finalText: string | null = null;
   let promptTokens = 0;
   let completionTokens = 0;
+  let usedModel = MODEL;
   const toolCallsLog: string[] = [];
   const startMs = Date.now();
 
   for (let i = 0; i < 10; i++) {
-    const response = await anthropic.messages.create({
-      model: MODEL,
+    const response = await callClaude({
       max_tokens: 1024,
       system: fullSystemPrompt,
       tools: TOOL_DEFINITIONS,
@@ -257,6 +288,7 @@ export async function processCamiConversation(conversationId: string): Promise<v
 
     promptTokens += response.usage.input_tokens;
     completionTokens += response.usage.output_tokens;
+    usedModel = response.model ?? usedModel;
 
     if (response.stop_reason === "end_turn") {
       const textBlock = response.content
@@ -308,7 +340,7 @@ export async function processCamiConversation(conversationId: string): Promise<v
     conversation_id: conversationId,
     prompt_tokens: promptTokens,
     completion_tokens: completionTokens,
-    model: MODEL,
+    model: usedModel,
     latency_ms: latencyMs,
     tool_calls: toolCallsLog as unknown as import("@/types/database.types").Json,
   });
