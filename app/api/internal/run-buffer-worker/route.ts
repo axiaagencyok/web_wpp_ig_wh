@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { claimReadyEntries, deleteBufferEntry, releaseBufferEntry } from "@/lib/ai/buffer";
+import { claimReadyEntries, deleteBufferEntry, releaseBufferEntry, requeueIfPendingMessages } from "@/lib/ai/buffer";
 
 function isAuthorized(req: NextRequest): boolean {
   const auth = req.headers.get("authorization") ?? "";
@@ -57,6 +57,7 @@ export async function POST(req: NextRequest) {
 
     if (success) {
       await deleteBufferEntry(bufferId);
+      await requeueIfPendingMessages(conversationId);
       processed++;
     } else {
       await releaseBufferEntry(bufferId, retryCount);

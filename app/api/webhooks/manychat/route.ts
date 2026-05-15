@@ -61,7 +61,7 @@ async function processIncoming(payload: ManyChatPayload): Promise<void> {
   const contactPhone = `instagram:${manychatId}`;
 
   // Upsert conversation
-  const { data: conversation } = await adminClient
+  const { data: conversation, error: upsertError } = await adminClient
     .from("conversations")
     .upsert(
       {
@@ -78,7 +78,14 @@ async function processIncoming(payload: ManyChatPayload): Promise<void> {
     .single();
 
   if (!conversation) {
-    console.error("[ig-webhook] Error upserting conversation");
+    console.error(
+      "[ig-webhook] Error upserting conversation",
+      upsertError?.code,
+      upsertError?.message,
+      upsertError?.details,
+      upsertError?.hint,
+      { tenantId, contactPhone }
+    );
     return;
   }
 

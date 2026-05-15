@@ -59,6 +59,43 @@ export async function deleteBufferEntry(bufferId: string): Promise<void> {
 }
 
 /**
+ * After successfully processing a conversation, checks if new inbound messages
+ * arrived while processing was running (i.e. the buffer update was silently
+ * skipped because processing=true).  If yes, re-queues the conversation so
+ * those messages get answered.
+ */
+export async function requeueIfPendingMessages(conversationId: string): Promise<void> {
+  const { data: lastInbound } = await adminClient
+    .from("messages")
+    .select("created_at")
+    .eq("conversation_id", conversationId)
+    .eq("direction", "inbound")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (!lastInbound) return;
+
+  const { data: lastOutbound } = await adminClient
+    .from("messages")
+    .select("created_at")
+    .eq("conversation_id", conversationId)
+    .eq("direction", "outbound")
+    .eq("sender", "ai")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  const inboundAt  = new Date(lastInbound.created_at);
+  const outboundAt = lastOutbound ? new Date(lastOutbound.created_at) : new Date(0);
+
+  if (inboundAt > outboundAt) {
+    console.log(`[buffer] Pending messages detected after processing ${conversationId}, re-queuing`);
+    await upsertBuffer(conversationId, 5);
+  }
+}
+
+/**
  * Called when processing fails. Increments retry_count, resets processing=false,
  * and applies exponential backoff (30s → 90s) before the next attempt.
  * After 3 failures (retry_count 0→1→2→deleted) the entry is abandoned.

@@ -1,10 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import nodemailer from "nodemailer";
 import { adminClient } from "@/lib/supabase/admin";
-import { getCatalog } from "@/lib/google/sheets";
+import { getCatalog, searchCatalogFullText } from "@/lib/google/sheets";
 import { sendInstagramMessage, pauseInstagramBot } from "./manychat";
 
-const MODEL = "claude-haiku-4-5-20251001";
+const MODEL = "claude-sonnet-4-5";
 const CATALOG_SHEET_ID = process.env.INSTAGRAM_CATALOG_SHEET_ID ?? "1c7DpWjA7mi18Ii1oyqNnYqKALhOQDnRF1k7Bcfucm0Y";
 const CATALOG_RANGE = process.env.INSTAGRAM_CATALOG_RANGE ?? "Lista de Precios";
 const SUPERVISOR_EMAIL = process.env.SUPERVISOR_EMAIL ?? "axiaagencyok@gmail.com";
@@ -20,7 +20,11 @@ REGLA MÁS IMPORTANTE:
 
 Para cualquier consulta sobre productos, precios o disponibilidad, SIEMPRE consultá primero la herramienta del catálogo antes de responder. Nunca respondas precios ni disponibilidad de memoria ni de conversaciones anteriores. El catálogo se actualiza en tiempo real desde una planilla — un producto que existía antes puede no estar más, y los precios pueden haber cambiado.
 
-Cuando consultes el catálogo, vas a recibir TODOS los productos disponibles ahora mismo, con su tipo, marca, nombre, descripción y 3 precios (efectivo, transferencia, plazo 7/15 días). Tu trabajo es filtrar esa lista según lo que pidió el cliente y mostrarle solo los que coincidan.
+USO DE LA HERRAMIENTA:
+- Si el cliente pregunta por algo específico (producto, categoría, marca, modelo), usá get_catalogo con busqueda='[término en singular]'. Ej: busqueda='licuadora', busqueda='samsung', busqueda='heladera'.
+- Si la búsqueda devuelve resultados: mostrá esos productos.
+- Si la búsqueda devuelve el catálogo completo con la advertencia "BÚSQUEDA SIN RESULTADO EXACTO": REVISÁ CADA LÍNEA del catálogo completo antes de concluir que no hay productos. Buscá sinónimos, categorías relacionadas, o productos que sirvan para lo mismo. NUNCA digas "no tenemos" basándote solo en que la búsqueda exacta falló.
+- Si el cliente pide ver todo: usá get_catalogo sin busqueda.
 
 ---
 
@@ -98,10 +102,26 @@ const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   {
     name: "get_catalogo",
     description:
-      "Catálogo de productos de White Diamond. Devuelve TODOS los productos disponibles esta semana con tipo, marca, producto, descripción y 3 precios. Consultala SIEMPRE que el cliente pregunte por producto, precio o disponibilidad.",
+      "Catálogo de productos de White Diamond con precios actualizados en tiempo real.\n\n" +
+      "CUÁNDO usar busqueda (RECOMENDADO para consultas específicas):\n" +
+      "- El cliente pregunta por un producto o categoría específica → busqueda='licuadora'\n" +
+      "- El cliente pregunta por una marca → busqueda='samsung'\n" +
+      "- El cliente pregunta por un modelo → busqueda='galaxy a15'\n" +
+      "Usá el nombre en SINGULAR y sin adjetivos. Ejemplos: 'licuadora' no 'licuadoras baratas'.\n\n" +
+      "CUÁNDO NO usar busqueda:\n" +
+      "- El cliente pregunta qué tienen en general o pide ver todo el catálogo.\n\n" +
+      "Si la búsqueda no encuentra resultados exactos, recibirás el catálogo completo con una advertencia. " +
+      "En ese caso REVISÁ TODA LA LISTA línea por línea antes de decir que no hay productos.",
     input_schema: {
       type: "object" as const,
-      properties: {},
+      properties: {
+        busqueda: {
+          type: "string",
+          description:
+            "Término a buscar en todas las columnas del catálogo (tipo, marca, producto, descripción). " +
+            "Usar singular sin adjetivos. Ej: 'licuadora', 'heladera', 'samsung', 'galaxy a15'.",
+        },
+      },
       required: [],
     },
   },
@@ -258,7 +278,10 @@ export async function processCamiConversation(conversationId: string): Promise<v
         let result: string;
         if (block.name === "get_catalogo") {
           try {
-            result = await getCatalog(CATALOG_SHEET_ID, CATALOG_RANGE);
+            const { busqueda } = block.input as { busqueda?: string };
+            result = busqueda?.trim()
+              ? await searchCatalogFullText(CATALOG_SHEET_ID, CATALOG_RANGE, busqueda)
+              : await getCatalog(CATALOG_SHEET_ID, CATALOG_RANGE);
           } catch (e) {
             result = `Error obteniendo catálogo: ${(e as Error).message}`;
           }

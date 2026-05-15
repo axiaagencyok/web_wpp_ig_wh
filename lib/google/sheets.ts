@@ -60,9 +60,11 @@ export async function getCatalog(sheetId: string, range: string, categoryFilter?
     const tipoIndex = headers.findIndex((h) => h.toLowerCase().includes("tipo"));
     if (tipoIndex >= 0) {
       const term = categoryFilter.trim().toLowerCase();
-      filteredRows = filteredRows.filter((row) =>
-        (row[tipoIndex] ?? "").toLowerCase().includes(term)
-      );
+      filteredRows = filteredRows.filter((row) => {
+        const cellValue = (row[tipoIndex] ?? "").toLowerCase();
+        // Bidireccional: "licuadora" matchea "licuadoras" y viceversa
+        return cellValue.includes(term) || term.includes(cellValue);
+      });
     }
   }
 
@@ -70,6 +72,52 @@ export async function getCatalog(sheetId: string, range: string, categoryFilter?
     return categoryFilter
       ? `No se encontraron productos en la categoría "${categoryFilter}".`
       : "El catálogo está vacío.";
+  }
+
+  return formatAsMarkdown(headers, filteredRows);
+}
+
+/**
+ * Búsqueda full-text en TODAS las columnas del catálogo.
+ * - Divide searchTerm en palabras; una fila matchea si CUALQUIER palabra aparece en CUALQUIER celda.
+ * - Matching bidireccional: cellValue.includes(term) OR term.includes(cellValue) (solo si cellValue >= 4 chars).
+ * - Si 0 resultados: devuelve el catálogo completo con nota para que el modelo no se quede sin datos.
+ */
+export async function searchCatalogFullText(
+  sheetId: string,
+  range: string,
+  searchTerm: string
+): Promise<string> {
+  const trimmed = searchTerm.trim();
+  if (!trimmed) return getCatalog(sheetId, range);
+
+  const { headers, rows } = await fetchRawRows(sheetId, range);
+  if (headers.length === 0) return "El catálogo está vacío o no tiene datos.";
+
+  const terms = trimmed.toLowerCase().split(/\s+/).filter(Boolean);
+
+  const nonEmptyRows = rows.filter((row) => row.some((cell) => cell?.trim()));
+
+  const filteredRows = nonEmptyRows.filter((row) =>
+    terms.some((term) =>
+      row.some((cell) => {
+        const cellValue = (cell ?? "").toLowerCase().trim();
+        if (!cellValue) return false;
+        if (cellValue.includes(term)) return true;
+        // Solo secundario si cellValue es suficientemente largo (evita falsos positivos con "a", "el", etc.)
+        if (cellValue.length >= 4 && term.includes(cellValue)) return true;
+        return false;
+      })
+    )
+  );
+
+  if (filteredRows.length === 0) {
+    const fullCatalog = formatAsMarkdown(headers, nonEmptyRows);
+    return (
+      `⚠️ BÚSQUEDA SIN RESULTADO EXACTO para "${searchTerm}".\n` +
+      `Revisá el catálogo completo línea por línea antes de decir que no hay productos:\n\n` +
+      fullCatalog
+    );
   }
 
   return formatAsMarkdown(headers, filteredRows);
