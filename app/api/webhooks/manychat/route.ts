@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { adminClient } from "@/lib/supabase/admin";
 import { upsertBuffer } from "@/lib/ai/buffer";
 import { processInstagramMediaUrl, isInstagramMediaUrl } from "@/lib/instagram/media-processor";
@@ -116,13 +116,13 @@ export async function POST(req: NextRequest) {
     return new NextResponse("Bad Request", { status: 400 });
   }
 
-  // Respond 200 immediately so ManyChat doesn't retry
-  const response = new NextResponse("OK", { status: 200 });
+  after(async () => {
+    try {
+      await processIncoming(body as ManyChatPayload);
+    } catch (e) {
+      console.error("[ig-webhook] Processing error:", (e as Error).message);
+    }
+  });
 
-  // Fire-and-forget async processing
-  processIncoming(body as ManyChatPayload).catch((e) =>
-    console.error("[ig-webhook] Async processing error:", (e as Error).message)
-  );
-
-  return response;
+  return new NextResponse("OK", { status: 200 });
 }
