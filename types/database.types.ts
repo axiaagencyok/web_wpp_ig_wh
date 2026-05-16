@@ -24,6 +24,8 @@ export type Database = {
           admin_phone: string | null
           admin_system_prompt: string | null
           ig_agent_system_prompt: string | null
+          stories_context_general: string | null
+          stories_context_keywords: string | null
           created_at: string
         }
         Insert: {
@@ -40,6 +42,8 @@ export type Database = {
           admin_phone?: string | null
           admin_system_prompt?: string | null
           ig_agent_system_prompt?: string | null
+          stories_context_general?: string | null
+          stories_context_keywords?: string | null
           created_at?: string
         }
         Update: {
@@ -56,6 +60,8 @@ export type Database = {
           admin_phone?: string | null
           admin_system_prompt?: string | null
           ig_agent_system_prompt?: string | null
+          stories_context_general?: string | null
+          stories_context_keywords?: string | null
           created_at?: string
         }
         Relationships: []

@@ -15,6 +15,7 @@ import {
   type PauseConversationInput,
   type UpdateContactInfoInput,
   type UpdateAgentPromptInput,
+  type UpdateStoriesContextInput,
 } from "./admin-tools";
 import type { Conversation, Tenant } from "@/types/database.types";
 
@@ -304,6 +305,30 @@ async function executeTool(
     return `✅ IA ${paused ? "pausada" : "reactivada"} para ${contact_phone}.`;
   }
 
+  if (name === "update_stories_context_general") {
+    const { content } = input as unknown as UpdateStoriesContextInput;
+
+    const { error } = await adminClient
+      .from("tenants")
+      .update({ stories_context_general: content })
+      .eq("id", tenantId);
+
+    if (error) return `Error al guardar el contexto general: ${error.message}`;
+    return `✅ Contexto general de stories actualizado.`;
+  }
+
+  if (name === "update_stories_context_keywords") {
+    const { content } = input as unknown as UpdateStoriesContextInput;
+
+    const { error } = await adminClient
+      .from("tenants")
+      .update({ stories_context_keywords: content })
+      .eq("id", tenantId);
+
+    if (error) return `Error al guardar las palabras clave: ${error.message}`;
+    return `✅ Palabras clave de stories actualizadas.`;
+  }
+
   if (name === "update_agent_prompt") {
     const { new_prompt } = input as unknown as UpdateAgentPromptInput;
 
@@ -366,6 +391,10 @@ Tenés acceso a las siguientes tools:
 - send_message_to_contact: envía WhatsApp a un contacto (requiere confirmación).
 - pause_conversation_automation: pausa/reactiva IA para un chat.
 - update_contact_info: actualiza nombre, email, notas, tags de un contacto.
+- update_stories_context_general: guarda qué producto o tema publicó hoy en stories (sin precios ni stock).
+- update_stories_context_keywords: guarda las palabras clave del día cuando hay varios productos en stories (sin precios ni stock).
+
+Cuando el dueño diga cosas como "subí stories de vasos hoy" o "hoy publiqué jarros", llamá update_stories_context_general con un texto descriptivo del producto o tema. Si el dueño aclara varias palabras clave (ej: "VASOS para los vasos, JARROS para los jarros"), usá update_stories_context_keywords. NUNCA incluyas precios ni stock en el contexto: eso siempre se trae del catálogo. No requieren confirmación: ejecutalas directamente y confirmá al admin.
 
 Para acciones destructivas (update_catalog_price, add_catalog_item, delete_catalog_item, send_message_to_contact) siempre mostrás un PREVIEW y esperás confirmación explícita ("sí", "confirmá", "dale") antes de ejecutar.
 REGLA CRÍTICA: Después de ejecutar CUALQUIER acción (tool call), SIEMPRE generá una respuesta de texto confirmando al admin qué hiciste, en lenguaje natural y concreto. Ejemplo: "Listo, actualicé el precio del iPhone 14 de $1.200.000 a $1.300.000." Si la acción falló, reportá el error con claridad. Nunca quedes en silencio después de una tool.

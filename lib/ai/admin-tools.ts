@@ -192,6 +192,45 @@ export const ADMIN_TOOL_DEFINITIONS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "update_stories_context_general",
+    description:
+      "Guarda el contexto general de stories del día. " +
+      "Describe QUÉ PRODUCTO o TEMA se publicó. " +
+      "NO incluyas precios ni stock — esos siempre se traen del catálogo. " +
+      "Ejemplo válido: 'Hoy publicamos vasos de vidrio'. " +
+      "Ejemplo inválido: 'Vasos a $15.000' (NO hardcodear precios). " +
+      "No requiere confirmación: ejecutá directamente.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        content: {
+          type: "string",
+          description: "Texto descriptivo del producto o tema publicado en stories. Sin precios ni stock.",
+        },
+      },
+      required: ["content"],
+    },
+  },
+  {
+    name: "update_stories_context_keywords",
+    description:
+      "Guarda las palabras clave de stories del día cuando se publican varios productos. " +
+      "Listá las palabras clave que el dueño pide responder en cada story y qué producto representa cada una. " +
+      "NO incluyas precios ni stock. " +
+      "Ejemplo válido: 'VASOS: vasos de vidrio rojos y azules. JARROS: jarros de cerámica chicos y grandes'. " +
+      "No requiere confirmación: ejecutá directamente.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        content: {
+          type: "string",
+          description: "Listado de palabras clave y qué producto representa cada una.",
+        },
+      },
+      required: ["content"],
+    },
+  },
+  {
     name: "update_contact_info",
     description: "Actualiza la información CRM de un contacto (nombre, email, notas, tags).",
     input_schema: {
@@ -260,6 +299,10 @@ export interface SendMessageToContactInput {
 export interface UpdateAgentPromptInput {
   new_prompt: string;
   confirmed?: boolean;
+}
+
+export interface UpdateStoriesContextInput {
+  content: string;
 }
 
 export interface PauseConversationInput {
