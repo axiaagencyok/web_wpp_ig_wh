@@ -8,8 +8,8 @@ interface Props {
 }
 
 const SRC: Record<Exclude<Tone, "auto">, string> = {
-  nocturno: "/brand/Fenoma%20Simbolo%20PNG.png",
-  cream:    "/brand/Fenoma%20Simbolo%20Blanco%3B%20Violeta.png",
+  nocturno: "/brand/fenoma-symbol-ink.png",
+  cream:    "/brand/fenoma-symbol-cream.png",
 };
 
 export function FenomaMark({ size = 24, tone = "nocturno", className = "", ariaLabel }: Props) {
