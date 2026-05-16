@@ -239,14 +239,31 @@ export async function processCamiConversation(conversationId: string): Promise<v
 
   const { data: tenant } = await adminClient
     .from("tenants")
-    .select("ig_agent_system_prompt")
+    .select("ig_agent_system_prompt, stories_context_general, stories_context_keywords")
     .eq("id", conversation.tenant_id)
     .single();
+
+  const customFields = (conversation.custom_fields as Record<string, unknown> | null) ?? {};
+  const isStoryReply = customFields.story_reply === true;
+  const storyGeneral = tenant?.stories_context_general?.trim();
+  const storyKeywords = tenant?.stories_context_keywords?.trim();
+  const hasStoryContext = isStoryReply && (storyGeneral || storyKeywords);
+
+  const storyContextBlock = hasStoryContext
+    ? `\n\n---\nCONTEXTO DE STORIES (HOY):\n` +
+      (storyGeneral ? `Contexto general: ${storyGeneral}\n` : "") +
+      (storyKeywords ? `Palabras clave: ${storyKeywords}\n` : "") +
+      `\nEl contexto te dice de qué PRODUCTO o TEMA se está hablando — NO contiene precios ni stock. ` +
+      `Identificá el producto y después usá get_catalogo para traer precio, stock, descripción y detalles REALES. ` +
+      `Si el mensaje del cliente contiene una palabra clave del contexto de keywords, priorizá esa interpretación. ` +
+      `Si no, usá el contexto general. Si nada aplica, seguí el flow normal del catálogo.`
+    : "";
 
   const fullSystemPrompt = SYSTEM_PROMPT_CAMI +
     (tenant?.ig_agent_system_prompt?.trim()
       ? `\n\n---\nPERSONALIZACIÓN ADICIONAL:\n${tenant.ig_agent_system_prompt}`
-      : "");
+      : "") +
+    storyContextBlock;
 
   // Load recent messages
   const { data: rawMessages } = await adminClient
