@@ -4,6 +4,7 @@ import { useState } from "react";
 import { NavSidebar } from "@/components/panel/NavSidebar";
 import { ChatList } from "@/components/panel/ChatList";
 import { ChatWindow } from "@/components/panel/ChatWindow";
+import { ContactPanel } from "@/components/panel/ContactPanel";
 import { MessageSquare } from "lucide-react";
 import type { Conversation } from "@/types/database.types";
 
@@ -34,7 +35,7 @@ export default function DashboardPage() {
 
   return (
     <div className="flex h-full overflow-hidden bg-[#F8F7FF] dark:bg-[#0F0B1F]">
-      {/* ── Narrow icon nav (desktop only) ── */}
+      {/* ── Nav sidebar (desktop only) ── */}
       <NavSidebar />
 
       {/* ── Conversation list ── */}
@@ -66,6 +67,17 @@ export default function DashboardPage() {
           <EmptyState />
         )}
       </div>
+
+      {/* ── Contact panel — desktop right column (xl+) ── */}
+      {selected && (
+        <div className="hidden xl:flex flex-col flex-shrink-0 w-[296px] border-l border-gray-100 dark:border-[#2D2A45] bg-white dark:bg-[#0F0B1F]">
+          <ContactPanel
+            key={selected.id}
+            conversation={selected}
+            onSaved={handleConversationUpdate}
+          />
+        </div>
+      )}
     </div>
   );
 }

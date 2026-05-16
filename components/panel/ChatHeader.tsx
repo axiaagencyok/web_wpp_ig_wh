@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { MoreVertical, ArrowLeft, Phone, ChevronRight, Hand, AlertCircle, Star } from "lucide-react";
+import { MoreVertical, ArrowLeft, Phone, Video, ChevronRight, Hand, AlertCircle, Star, Wifi } from "lucide-react";
 import { toast } from "sonner";
 import { AutomationToggle } from "./AutomationToggle";
 import { ContactSheet } from "./ContactSheet";
@@ -176,6 +176,13 @@ export function ChatHeader({ conversation, onToggle, onConversationUpdate, onBac
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="flex items-center gap-1">
+                  <Wifi size={9} className="text-green-500 flex-shrink-0" />
+                  <span className="text-[11px] font-medium text-green-600 dark:text-green-400">
+                    En línea
+                  </span>
+                </div>
+                <span className="text-gray-300 dark:text-gray-700 text-[10px] select-none">·</span>
+                <div className="flex items-center gap-1">
                   <Phone size={9} className="text-gray-400 flex-shrink-0" />
                   <span className="text-[11.5px] text-gray-400 font-mono">
                     {displayPhone(conversation.contact_phone)}
@@ -187,6 +194,21 @@ export function ChatHeader({ conversation, onToggle, onConversationUpdate, onBac
           </button>
 
           <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Decorative call/video buttons — visible on xl screens (ContactPanel takes right column) */}
+            <button
+              disabled
+              title="Llamada (próximamente)"
+              className="hidden xl:flex w-9 h-9 items-center justify-center rounded-full border border-gray-200 dark:border-[#2D2A45] text-gray-400 cursor-not-allowed opacity-50"
+            >
+              <Phone size={15} />
+            </button>
+            <button
+              disabled
+              title="Video (próximamente)"
+              className="hidden xl:flex w-9 h-9 items-center justify-center rounded-full border border-gray-200 dark:border-[#2D2A45] text-gray-400 cursor-not-allowed opacity-50"
+            >
+              <Video size={15} />
+            </button>
             <AutomationToggle
               conversationId={conversation.id}
               initialPaused={conversation.automation_paused}
