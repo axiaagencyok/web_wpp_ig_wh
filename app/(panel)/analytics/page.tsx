@@ -10,8 +10,9 @@ import {
   MessageSquare, Zap, Users, DollarSign, BarChart2,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { NavSidebar } from "@/components/panel/NavSidebar";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { ColumnHeader } from "@/components/panel/ColumnHeader";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -43,16 +44,16 @@ interface AnalyticsData {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const COLOR_INBOUND = "#A89E90";
-const COLOR_AI      = "#8B5CF6";
-const COLOR_HUMAN   = "#4B4367";
+const COLOR_INBOUND = "#A89E90";  // Piedra
+const COLOR_AI      = "#4A4560";  // Violeta brand
+const COLOR_HUMAN   = "#2E2A3F";  // Nocturno
 
 const DEAL_COLORS: Record<string, string> = {
   nuevo:          "#A89E90",
-  contactado:     "#8B5CF6",
-  esperando_pago: "#D97706",
-  pago_pendiente: "#B45309",
-  cerrado:        "#65A30D",
+  contactado:     "#4A4560",
+  esperando_pago: "#B89066",
+  pago_pendiente: "#8E6E47",
+  cerrado:        "#7A8569",
 };
 
 const DEAL_LABELS: Record<string, string> = {
@@ -120,18 +121,19 @@ function EmptyChart({ label }: { label: string }) {
   );
 }
 
-interface KpiCardProps {
+interface KpiCellProps {
   label: string;
   value: string | number;
   description?: string;
   icon: React.ElementType;
   delta?: number | null;
   color?: string;
+  className?: string;
 }
 
-function KpiCard({ label, value, description, icon: Icon, delta, color = "#8B5CF6" }: KpiCardProps) {
+function KpiCell({ label, value, description, icon: Icon, delta, color = "#4A4560", className }: KpiCellProps) {
   return (
-    <div className="bg-card border border-border rounded-2xl p-5 flex flex-col gap-3">
+    <div className={cn("p-5 flex flex-col gap-3", className)}>
       <div className="flex items-start justify-between gap-2">
         <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground leading-tight">
           {label}
@@ -173,9 +175,17 @@ function KpiCard({ label, value, description, icon: Icon, delta, color = "#8B5CF
 function SkeletonPage() {
   return (
     <div className="space-y-6 animate-pulse">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="bg-cream-raised border border-line rounded-[16px] overflow-hidden grid grid-cols-2 lg:grid-cols-4">
         {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="bg-card border border-border rounded-2xl p-5 space-y-3">
+          <div
+            key={i}
+            className={cn(
+              "p-5 space-y-3",
+              i === 0 && "border-r border-line border-b lg:border-b-0",
+              i === 1 && "border-b border-line lg:border-b-0 lg:border-r",
+              i === 2 && "border-r border-line",
+            )}
+          >
             <Skeleton className="h-3 w-24 rounded" />
             <Skeleton className="h-10 w-16 rounded" />
             <Skeleton className="h-3 w-20 rounded" />
@@ -235,10 +245,9 @@ export default function AnalyticsPage() {
                       (data?.kpis.totalMessages ?? 0) > 0;
 
   return (
-    <div className="flex h-full overflow-hidden bg-[#F8F7FF] dark:bg-[#0F0B1F]">
-      <NavSidebar />
-
-      <div className="flex-1 min-w-0 overflow-y-auto">
+    <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
+      <ColumnHeader />
+      <div className="flex-1 overflow-y-auto">
         <div className="max-w-6xl mx-auto px-5 lg:px-8 py-8 space-y-6">
 
           {/* ── Header ── */}
@@ -300,35 +309,38 @@ export default function AnalyticsPage() {
             </div>
           ) : (
             <>
-              {/* ── A: KPI cards ── */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <KpiCard
+              {/* ── A: KPI grid — one surface, 4 cells divided by hairlines ── */}
+              <div className="bg-cream-raised border border-line rounded-[16px] overflow-hidden grid grid-cols-2 lg:grid-cols-4">
+                <KpiCell
                   label="Mensajes totales"
                   icon={MessageSquare}
                   value={data.kpis.totalMessages.toLocaleString("es-AR")}
                   delta={data.kpis.totalDelta}
-                  color="#8B5CF6"
+                  color="#2E2A3F"
+                  className="border-r border-line border-b lg:border-b-0"
                 />
-                <KpiCard
+                <KpiCell
                   label="% Automatizados"
                   icon={Zap}
                   value={`${data.kpis.automationPct}%`}
                   description="de mensajes salientes"
-                  color="#7C3AED"
+                  color="#4A4560"
+                  className="border-b border-line lg:border-b-0 lg:border-r"
                 />
-                <KpiCard
+                <KpiCell
                   label="Derivaciones"
                   icon={Users}
                   value={data.kpis.derivations}
                   description="a agente humano"
-                  color="#D97706"
+                  color="#B89066"
+                  className="border-r border-line"
                 />
-                <KpiCard
+                <KpiCell
                   label="Costo estimado"
                   icon={DollarSign}
                   value={`$${data.kpis.costUSD.toFixed(4)}`}
                   description={`${((data.kpis.tokensInput + data.kpis.tokensOutput) / 1000).toFixed(1)}k tokens`}
-                  color="#65A30D"
+                  color="#7A8569"
                 />
               </div>
 

@@ -5,17 +5,31 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-const AVATAR_GRADIENTS: [string, string][] = [
-  ["#7C3AED", "#EC4899"],
-  ["#3B82F6", "#06B6D4"],
-  ["#22C55E", "#10B981"],
-  ["#F59E0B", "#EF4444"],
-  ["#8B5CF6", "#6366F1"],
-  ["#EC4899", "#F43F5E"],
-  ["#14B8A6", "#0EA5E9"],
-  ["#F97316", "#FBBF24"],
-  ["#A855F7", "#7C3AED"],
-  ["#EF4444", "#F97316"],
+/* Editorial avatar palette — Nocturno / Violeta / Piedra families.
+   Mix of solid + gradient backgrounds, dark + stone surfaces, occasional violet ring. */
+export type AvatarStyle = {
+  bg: string;            // CSS background (solid color or gradient)
+  fg: string;            // initial color
+  ring?: string;         // optional outer ring color
+};
+
+const AVATAR_STYLES: AvatarStyle[] = [
+  { bg: "linear-gradient(135deg, #2E2A3F, #4A4560)", fg: "#EDE5D8" },
+  { bg: "#2E2A3F",                                   fg: "#EDE5D8" },
+  { bg: "linear-gradient(135deg, #4A4560, #6B6385)", fg: "#EDE5D8" },
+  { bg: "#4A4560",                                   fg: "#EDE5D8" },
+  { bg: "#A89E90",                                   fg: "#2E2A3F" },
+  { bg: "#8A7D6D",                                   fg: "#EDE5D8" },
+  { bg: "linear-gradient(135deg, #3F3B55, #2E2A3F)", fg: "#EDE5D8" },
+  { bg: "#3F3B55",                                   fg: "#EDE5D8" },
+  { bg: "#2E2A3F",                                   fg: "#EDE5D8", ring: "#4A4560" },
+  { bg: "linear-gradient(135deg, #5A5470, #3F3B55)", fg: "#EDE5D8" },
+  { bg: "#4A4560",                                   fg: "#EDE5D8", ring: "#6B6385" },
+  { bg: "linear-gradient(135deg, #6B6385, #4A4560)", fg: "#EDE5D8" },
+  { bg: "#C9BFAE",                                   fg: "#2E2A3F" },
+  { bg: "#6B6385",                                   fg: "#EDE5D8" },
+  { bg: "linear-gradient(135deg, #4A4560, #2E2A3F)", fg: "#EDE5D8" },
+  { bg: "linear-gradient(135deg, #A89E90, #8A7D6D)", fg: "#EDE5D8" },
 ];
 
 function hashSeed(seed: string): number {
@@ -27,14 +41,16 @@ function hashSeed(seed: string): number {
   return hash;
 }
 
+export function getAvatarStyle(seed: string): AvatarStyle {
+  return AVATAR_STYLES[hashSeed(seed) % AVATAR_STYLES.length];
+}
+
 export function avatarGradient(seed: string): string {
-  const [from, to] = AVATAR_GRADIENTS[hashSeed(seed) % AVATAR_GRADIENTS.length];
-  return `linear-gradient(135deg, ${from}, ${to})`;
+  return getAvatarStyle(seed).bg;
 }
 
 export function avatarColor(seed: string): string {
-  const [from] = AVATAR_GRADIENTS[hashSeed(seed) % AVATAR_GRADIENTS.length];
-  return from;
+  return getAvatarStyle(seed).bg;
 }
 
 export function phoneInitials(phone: string): string {

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Loader2, Phone, Bot, Save, Settings } from "lucide-react";
 import { toast } from "sonner";
+import { ColumnHeader } from "@/components/panel/ColumnHeader";
 
 interface TenantSettings {
   id: string;
@@ -90,30 +91,32 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 size={20} className="animate-spin text-muted-foreground" />
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
+        <ColumnHeader />
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 size={20} className="animate-spin text-muted-foreground" />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-muted/20">
-      <div className="max-w-2xl mx-auto px-6 py-10 space-y-8">
+    <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
+      <ColumnHeader />
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-2xl mx-auto px-6 py-10 space-y-8">
         {/* Page header */}
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
-            <Settings size={18} className="text-primary" />
-          </div>
-          <div>
-            <h1 className="font-display text-xl font-bold text-foreground">Configuración</h1>
-            <p className="text-sm text-muted-foreground">{settings?.name}</p>
-          </div>
+        <div>
+          <h1 className="font-display text-[28px] text-ink leading-tight">Configuración</h1>
+          {settings?.name && (
+            <p className="text-[13px] text-stone mt-1">{settings.name}</p>
+          )}
         </div>
 
         <form onSubmit={handleSave} className="space-y-6">
           {/* ── Tenant info (readonly) ── */}
           <section className="bg-card border border-border rounded-2xl p-5 space-y-4">
-            <h2 className="text-sm font-semibold text-foreground">Información del negocio</h2>
+            <h2 className="text-[14px] font-medium text-ink">Información del negocio</h2>
 
             <Field label="Número principal" icon={<Phone size={13} />}>
               <input
@@ -132,8 +135,8 @@ export default function SettingsPage() {
                 <WaIcon size={14} />
               </div>
               <div>
-                <h2 className="text-sm font-semibold text-foreground">Lucas — agente WhatsApp</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
+                <h2 className="text-[14px] font-medium text-ink">Lucas — agente WhatsApp</h2>
+                <p className="text-[12px] text-stone mt-0.5 leading-relaxed">
                   Personalización adicional para Lucas. El prompt base ya está configurado — acá podés agregar instrucciones específicas de tu negocio: nombre de la empresa, horarios, restricciones, etc.
                 </p>
               </div>
@@ -147,7 +150,7 @@ export default function SettingsPage() {
                 rows={6}
                 className={`${inputCls} resize-none leading-relaxed`}
               />
-              <p className="text-[10px] text-muted-foreground px-1">
+              <p className="text-[10px] text-stone px-1">
                 Estas instrucciones se agregan al final del prompt base de Lucas. No reemplaza la lógica principal.
               </p>
             </Field>
@@ -160,8 +163,8 @@ export default function SettingsPage() {
                 <IgIcon size={14} />
               </div>
               <div>
-                <h2 className="text-sm font-semibold text-foreground">Cami — agente Instagram</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
+                <h2 className="text-[14px] font-medium text-ink">Cami — agente Instagram</h2>
+                <p className="text-[12px] text-stone mt-0.5 leading-relaxed">
                   Personalización adicional para Cami. Igual que Lucas, el prompt base ya está configurado — acá agregás lo específico de tu negocio para Instagram.
                 </p>
               </div>
@@ -175,7 +178,7 @@ export default function SettingsPage() {
                 rows={6}
                 className={`${inputCls} resize-none leading-relaxed`}
               />
-              <p className="text-[10px] text-muted-foreground px-1">
+              <p className="text-[10px] text-stone px-1">
                 Estas instrucciones se agregan al final del prompt base de Cami. No reemplaza la lógica principal.
               </p>
             </Field>
@@ -188,8 +191,8 @@ export default function SettingsPage() {
                 <Bot size={14} className="text-accent" />
               </div>
               <div>
-                <h2 className="text-sm font-semibold text-foreground">Juan — admin via WhatsApp</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
+                <h2 className="text-[14px] font-medium text-ink">Juan — admin via WhatsApp</h2>
+                <p className="text-[12px] text-stone mt-0.5 leading-relaxed">
                   El gerente puede enviar mensajes desde este número para obtener reportes y gestionar el catálogo.
                 </p>
               </div>
@@ -203,7 +206,7 @@ export default function SettingsPage() {
                 placeholder="whatsapp:+54911..."
                 className={inputCls}
               />
-              <p className="text-[10px] text-muted-foreground px-1">
+              <p className="text-[10px] text-stone px-1">
                 Formato: <code className="font-mono">whatsapp:+549...</code>
               </p>
             </Field>
@@ -225,42 +228,43 @@ export default function SettingsPage() {
               type="submit"
               disabled={saving}
               className="
-                flex items-center gap-2 rounded-xl bg-primary text-primary-foreground
-                px-5 py-2.5 text-sm font-semibold
-                hover:opacity-90 transition-all duration-200
-                disabled:opacity-60 disabled:cursor-not-allowed
-                shadow-sm shadow-primary/20 cursor-pointer
+                flex items-center gap-2 rounded-full bg-ink text-cream
+                px-5 py-2.5 text-[13px] font-medium
+                hover:bg-accent transition-colors duration-150
+                disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-ink
+                cursor-pointer
               "
             >
               {saving
                 ? <><Loader2 size={15} className="animate-spin" />Guardando…</>
-                : <><Save size={15} />Guardar cambios</>
+                : <><Save size={15} strokeWidth={1.8} />Guardar cambios</>
               }
             </button>
           </div>
         </form>
+        </div>
       </div>
     </div>
   );
 }
 
 const inputCls = `
-  w-full rounded-xl bg-muted border border-transparent px-3 py-2
-  text-sm text-foreground placeholder:text-muted-foreground
-  outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/30 focus:bg-background
-  transition-all duration-200
+  w-full rounded-xl bg-cream border border-line px-3 py-2
+  text-sm text-ink placeholder:text-stone
+  outline-none focus:border-accent focus:bg-cream-soft
+  transition-colors duration-150
 `;
 
 const readonlyCls = `
-  w-full rounded-xl bg-muted/50 border border-transparent px-3 py-2
-  text-sm text-muted-foreground font-mono
+  w-full rounded-xl bg-cream-soft border border-line px-3 py-2
+  text-sm text-stone font-mono
   outline-none cursor-default select-all
 `;
 
 function Field({ label, icon, children }: { label: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+      <label className="flex items-center gap-1.5 text-[10px] font-bold text-stone uppercase tracking-[0.14em]">
         {icon}
         {label}
       </label>

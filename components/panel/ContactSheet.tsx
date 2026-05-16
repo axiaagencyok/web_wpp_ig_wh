@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, User, Mail, Phone, StickyNote, Tag, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { avatarColor, phoneInitials, cn } from "@/lib/utils";
+import { getAvatarStyle, phoneInitials, cn } from "@/lib/utils";
 import type { Conversation } from "@/types/database.types";
 
 interface Props {
@@ -89,7 +89,7 @@ export function ContactSheet({ conversation, open, onClose, onSaved }: Props) {
 
   const isInstagram = conversation.channel === "instagram";
   const igUsername  = (conversation.custom_fields as Record<string, string> | null)?.ig_username ?? null;
-  const color    = avatarColor(conversation.contact_phone);
+  const avatarStyle = getAvatarStyle(conversation.contact_phone);
   const initials = phoneInitials(conversation.contact_phone);
   const phone    = isInstagram
     ? (igUsername ? `@${igUsername}` : conversation.contact_phone.replace("instagram:", ""))
@@ -115,32 +115,36 @@ export function ContactSheet({ conversation, open, onClose, onSaved }: Props) {
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 28, stiffness: 300 }}
-            className="fixed inset-y-0 right-0 w-full max-w-sm bg-card border-l border-border shadow-2xl z-50 flex flex-col"
+            className="fixed inset-y-0 right-0 w-full max-w-sm bg-cream-raised border-l border-line shadow-card-lg z-50 flex flex-col"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-              <h2 className="font-semibold text-foreground text-base">Info del contacto</h2>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-line">
+              <h2 className="font-display text-[18px] text-ink leading-none">Info del contacto</h2>
               <button
                 onClick={onClose}
-                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                className="w-8 h-8 flex items-center justify-center rounded-full text-stone hover:text-ink hover:bg-cream transition-colors cursor-pointer"
               >
-                <X size={16} />
+                <X size={16} strokeWidth={1.8} />
               </button>
             </div>
 
             {/* Avatar hero */}
-            <div className="flex flex-col items-center gap-3 py-6 border-b border-border">
+            <div className="flex flex-col items-center gap-3 py-6 border-b border-line">
               <div
-                className="w-16 h-16 rounded-full flex items-center justify-center text-white text-xl font-bold shadow-lg"
-                style={{ backgroundColor: color }}
+                className="w-16 h-16 rounded-full flex items-center justify-center text-lg font-medium tracking-tight"
+                style={{
+                  background: avatarStyle.bg,
+                  color: avatarStyle.fg,
+                  ...(avatarStyle.ring ? { boxShadow: `0 0 0 2px ${avatarStyle.ring}` } : {}),
+                }}
               >
                 {initials}
               </div>
               <div className="text-center">
-                <p className="font-semibold text-foreground text-sm">
+                <p className="font-medium text-ink text-sm">
                   {name || phone}
                 </p>
-                <p className="text-xs text-muted-foreground font-mono mt-0.5">{phone}</p>
+                <p className="text-xs text-stone font-mono mt-0.5">{phone}</p>
               </div>
             </div>
 
@@ -165,7 +169,7 @@ export function ContactSheet({ conversation, open, onClose, onSaved }: Props) {
                       href={`https://instagram.com/${igUsername}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className={cn(inputCls, "flex items-center gap-2 text-pink-600 dark:text-pink-400 hover:underline cursor-pointer")}
+                      className={cn(inputCls, "flex items-center gap-2 text-accent hover:underline cursor-pointer")}
                     >
                       @{igUsername}
                     </a>
@@ -203,19 +207,19 @@ export function ContactSheet({ conversation, open, onClose, onSaved }: Props) {
               {/* Tags */}
               <Field label="Etiquetas" icon={<Tag size={13} />}>
                 <div
-                  className="min-h-[42px] flex flex-wrap gap-1.5 items-center rounded-xl bg-muted px-3 py-2 cursor-text focus-within:ring-2 focus-within:ring-primary/30 focus-within:bg-background transition-all"
+                  className="min-h-[42px] flex flex-wrap gap-1.5 items-center rounded-xl bg-cream border border-line px-3 py-2 cursor-text focus-within:border-accent transition-colors"
                   onClick={() => tagRef.current?.focus()}
                 >
                   {tags.map((t) => (
                     <span
                       key={t}
-                      className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-accent/10 text-accent"
+                      className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-accent-soft text-accent"
                     >
                       {t}
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); removeTag(t); }}
-                        className="hover:text-primary/60 cursor-pointer"
+                        className="hover:opacity-70 cursor-pointer"
                       >
                         <X size={10} />
                       </button>
@@ -228,10 +232,10 @@ export function ContactSheet({ conversation, open, onClose, onSaved }: Props) {
                     onKeyDown={onTagKeyDown}
                     onBlur={() => { if (tagInput) addTag(tagInput); }}
                     placeholder={tags.length === 0 ? "Escribí y Enter para agregar…" : ""}
-                    className="bg-transparent outline-none text-sm text-foreground placeholder:text-muted-foreground flex-1 min-w-[80px]"
+                    className="bg-transparent outline-none text-sm text-ink placeholder:text-stone flex-1 min-w-[80px]"
                   />
                 </div>
-                <p className="text-[10px] text-muted-foreground mt-1 px-1">
+                <p className="text-[10px] text-stone mt-1 px-1">
                   Enter o coma para agregar · Backspace para borrar el último
                 </p>
               </Field>
@@ -249,17 +253,17 @@ export function ContactSheet({ conversation, open, onClose, onSaved }: Props) {
             </div>
 
             {/* Footer */}
-            <div className="px-5 py-4 border-t border-border">
+            <div className="px-5 py-4 border-t border-line">
               <button
                 onClick={handleSave}
                 disabled={saving}
                 className="
                   w-full flex items-center justify-center gap-2
-                  rounded-xl bg-primary text-primary-foreground
-                  py-2.5 text-sm font-semibold
-                  hover:opacity-90 transition-all duration-200
-                  disabled:opacity-60 disabled:cursor-not-allowed
-                  shadow-sm shadow-primary/20 cursor-pointer
+                  rounded-full bg-ink text-cream
+                  py-2.5 text-sm font-medium
+                  hover:bg-accent transition-colors duration-200
+                  disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-ink
+                  cursor-pointer
                 "
               >
                 {saving
@@ -276,16 +280,16 @@ export function ContactSheet({ conversation, open, onClose, onSaved }: Props) {
 }
 
 const inputCls = `
-  w-full rounded-xl bg-muted border border-transparent px-3 py-2
-  text-sm text-foreground placeholder:text-muted-foreground
-  outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/30 focus:bg-background
-  transition-all duration-200
+  w-full rounded-xl bg-cream border border-line px-3 py-2
+  text-sm text-ink placeholder:text-stone
+  outline-none focus:border-accent focus:bg-cream-soft
+  transition-colors duration-150
 `;
 
 function Field({ label, icon, children }: { label: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+      <label className="flex items-center gap-1.5 text-[10px] font-bold text-stone uppercase tracking-[0.14em]">
         {icon}
         {label}
       </label>

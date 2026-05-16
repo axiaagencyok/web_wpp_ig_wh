@@ -10,7 +10,7 @@ interface Props {
 }
 
 const QUICK_REPLIES = [
-  { label: "Saludo",          text: "¡Hola! ¿En qué puedo ayudarte hoy? 😊" },
+  { label: "Saludo",          text: "¡Hola! ¿En qué puedo ayudarte hoy?" },
   { label: "Envíos",          text: "Los envíos se realizan de lunes a viernes en 3-5 días hábiles." },
   { label: "Métodos de pago", text: "Aceptamos transferencia bancaria, tarjeta de crédito/débito y efectivo." },
   { label: "Devoluciones",    text: "Para gestionar una devolución escribinos con tu número de pedido y te ayudamos." },
@@ -80,14 +80,19 @@ export function MessageInput({ conversationId, onSent }: Props) {
   const hasText = text.trim().length > 0;
 
   return (
-    <div className="bg-white dark:bg-[#1A1530] border-t border-gray-100 dark:border-[#2D2A45] shadow-[0_-4px_20px_rgba(17,24,39,0.04)]">
+    <div className="bg-cream-raised border-t border-line">
       {/* Quick reply chips */}
       <div className="flex items-center gap-2 px-4 pt-3 pb-0 overflow-x-auto scrollbar-none">
         {QUICK_REPLIES.map((qr) => (
           <button
             key={qr.label}
             onClick={() => insertQuickReply(qr.text)}
-            className="flex-shrink-0 text-[12px] font-medium px-3.5 py-1.5 rounded-full border border-gray-200 dark:border-[#2D2A45] bg-white dark:bg-white/5 text-gray-600 dark:text-gray-400 hover:bg-violet-50 hover:text-violet-700 hover:border-violet-200 dark:hover:bg-violet-900/20 dark:hover:text-violet-300 dark:hover:border-violet-700 transition-all duration-150 cursor-pointer whitespace-nowrap"
+            className="
+              flex-shrink-0 text-[12px] font-medium px-3.5 py-1.5 rounded-full
+              border border-line bg-cream text-ink-soft
+              hover:bg-cream-soft hover:text-ink hover:border-stone/40
+              transition-colors cursor-pointer whitespace-nowrap
+            "
           >
             {qr.label}
           </button>
@@ -105,18 +110,14 @@ export function MessageInput({ conversationId, onSent }: Props) {
             placeholder="Escribí un mensaje…"
             rows={1}
             className="
-              w-full resize-none rounded-2xl
-              bg-gray-50 dark:bg-white/5
-              border border-gray-200 dark:border-[#2D2A45]
-              px-4 py-3
-              text-[15px] text-gray-800 dark:text-gray-100
-              placeholder:text-gray-400
+              w-full resize-none rounded-3xl
+              bg-cream border border-line
+              px-5 py-3
+              text-[15px] text-ink placeholder:text-stone
               outline-none
-              focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-700
-              focus:border-violet-300 dark:focus:border-violet-700
-              focus:bg-white dark:focus:bg-white/10
+              focus:border-accent focus:bg-cream-soft
               leading-relaxed max-h-[130px] overflow-y-auto
-              transition-all duration-200
+              transition-colors duration-150
               min-h-[48px]
             "
           />
@@ -128,18 +129,15 @@ export function MessageInput({ conversationId, onSent }: Props) {
           className="
             flex-shrink-0 flex items-center justify-center
             w-12 h-12 rounded-full
-            bg-violet-600 hover:bg-violet-700
-            text-white
-            transition-all duration-200 cursor-pointer
-            hover:scale-105
-            disabled:opacity-40 disabled:cursor-not-allowed disabled:scale-100 disabled:shadow-none
-            shadow-[0_8px_24px_rgba(124,58,237,0.35)]
-            hover:shadow-[0_12px_28px_rgba(124,58,237,0.45)]
+            bg-ink text-cream
+            hover:bg-accent
+            transition-colors duration-150 cursor-pointer
+            disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-ink
           "
         >
           {sending
-            ? <span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-            : <Send size={18} />
+            ? <span className="w-5 h-5 border-2 border-cream/40 border-t-cream rounded-full animate-spin" />
+            : <Send size={17} strokeWidth={1.8} />
           }
         </button>
       </div>

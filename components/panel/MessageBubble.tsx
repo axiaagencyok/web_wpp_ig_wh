@@ -15,19 +15,21 @@ function formatTime(iso: string) {
   });
 }
 
-function StatusTick({ status }: { status: Message["status"] }) {
-  if (status === "queued")    return <Clock size={11} className="flex-shrink-0 text-violet-300" />;
-  if (status === "sent")      return <Check size={11} className="flex-shrink-0 text-violet-400/70" />;
-  if (status === "delivered") return <CheckCheck size={11} className="flex-shrink-0 text-violet-400" />;
-  if (status === "read")      return <CheckCheck size={11} className="flex-shrink-0 text-violet-600" />;
-  if (status === "failed")    return <X size={11} className="flex-shrink-0 text-red-400" />;
+function StatusTick({ status, isOutbound }: { status: Message["status"]; isOutbound: boolean }) {
+  const base = "flex-shrink-0";
+  const muted = isOutbound ? "text-cream/55" : "text-stone";
+  if (status === "queued")    return <Clock size={11} className={`${base} ${muted}`} />;
+  if (status === "sent")      return <Check size={11} className={`${base} ${muted}`} />;
+  if (status === "delivered") return <CheckCheck size={11} className={`${base} ${muted}`} />;
+  if (status === "read")      return <CheckCheck size={11} className={`${base} text-accent`} />;
+  if (status === "failed")    return <X size={11} className={`${base} text-destructive`} />;
   return null;
 }
 
 function SenderPill({ sender }: { sender: Message["sender"] }) {
   if (sender === "ai") {
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-300">
+      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border border-line text-ink-soft bg-cream-raised">
         <Bot size={9} />
         IA
       </span>
@@ -35,7 +37,7 @@ function SenderPill({ sender }: { sender: Message["sender"] }) {
   }
   if (sender === "human") {
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-300">
+      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border border-line text-ink-soft bg-cream-raised">
         <User size={9} />
         Vos
       </span>
@@ -49,13 +51,12 @@ export function MessageBubble({ message }: Props) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2, ease: "easeOut" }}
+      transition={{ duration: 0.22, ease: "easeOut" }}
       className={`flex ${isOutbound ? "justify-end" : "justify-start"} px-4`}
     >
       <div className={`max-w-[72%] ${isOutbound ? "items-end" : "items-start"} flex flex-col gap-1`}>
-        {/* Sender pill (outbound only) */}
         {isOutbound && (
           <div className="px-1">
             <SenderPill sender={message.sender} />
@@ -63,13 +64,11 @@ export function MessageBubble({ message }: Props) {
         )}
 
         <div
-          className={`
-            relative px-4 py-3 shadow-sm
-            ${isOutbound
-              ? "bg-gradient-to-br from-violet-500 to-violet-600 text-white rounded-2xl rounded-br-sm"
-              : "bg-white dark:bg-[#1E1B2E] border border-gray-100 dark:border-[#2D2A45] text-gray-800 dark:text-gray-100 rounded-2xl rounded-bl-sm shadow-[0_2px_12px_rgba(17,24,39,0.06)]"
-            }
-          `}
+          className={
+            isOutbound
+              ? "px-4 py-3 bg-ink text-cream rounded-2xl rounded-br-[6px]"
+              : "px-4 py-3 bg-cream-raised text-ink border border-line rounded-2xl rounded-bl-[6px]"
+          }
         >
           {/* Image */}
           {message.media_url && message.media_type?.startsWith("image") && (
@@ -84,7 +83,9 @@ export function MessageBubble({ message }: Props) {
 
           {/* Image placeholder */}
           {!message.media_url && message.media_type?.startsWith("image") && (
-            <div className="flex items-center gap-2 mb-2 opacity-60">
+            <div
+              className={`flex items-center gap-2 mb-2 ${isOutbound ? "text-cream/70" : "text-stone"}`}
+            >
               <ImageIcon size={16} />
               <span className="text-xs">Imagen</span>
             </div>
@@ -93,8 +94,8 @@ export function MessageBubble({ message }: Props) {
           {/* Audio */}
           {message.media_type?.startsWith("audio") && (
             <div className="flex items-center gap-2 mb-2">
-              <Mic size={14} className={isOutbound ? "text-white/70" : "text-gray-400"} />
-              <span className={`text-xs italic ${isOutbound ? "text-white/80" : "text-gray-500"}`}>
+              <Mic size={14} className={isOutbound ? "text-cream/70" : "text-stone"} />
+              <span className={`text-xs italic ${isOutbound ? "text-cream/80" : "text-ink-soft"}`}>
                 {message.transcription ? `"${message.transcription}"` : "Audio"}
               </span>
             </div>
@@ -102,17 +103,23 @@ export function MessageBubble({ message }: Props) {
 
           {/* Body */}
           {message.body && (
-            <p className={`text-[15px] leading-relaxed whitespace-pre-wrap break-words ${isOutbound ? "text-white" : "text-gray-800 dark:text-gray-100"}`}>
+            <p
+              className={`text-[15px] leading-relaxed whitespace-pre-wrap break-words ${
+                isOutbound ? "text-cream" : "text-ink"
+              }`}
+            >
               {message.body}
             </p>
           )}
 
           {/* Footer: timestamp + ticks */}
           <div className="flex items-center justify-end gap-1 mt-1.5">
-            <span className={`text-[10px] tabular-nums ${isOutbound ? "text-white/60" : "text-gray-400"}`}>
+            <span
+              className={`text-[10px] tabular-nums ${isOutbound ? "text-cream/55" : "text-stone"}`}
+            >
               {formatTime(message.created_at)}
             </span>
-            {isOutbound && <StatusTick status={message.status} />}
+            {isOutbound && <StatusTick status={message.status} isOutbound={isOutbound} />}
           </div>
         </div>
       </div>

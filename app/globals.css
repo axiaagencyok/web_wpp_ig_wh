@@ -5,10 +5,23 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  /* Brand semantic tokens — preferred in new code */
+  --color-cream:         var(--bg-base);
+  --color-cream-soft:    var(--surface);
+  --color-cream-raised:  var(--surface-raised);
+  --color-ink:           var(--ink);
+  --color-ink-soft:      var(--ink-secondary);
+  --color-stone:         var(--stone);
+  --color-accent:        var(--accent);
+  --color-accent-soft:   var(--accent-soft);
+  --color-line:          var(--line);
+  --color-line-strong:   var(--line-strong);
+
+  /* Bridge tokens — kept so shadcn primitives keep working */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-jakarta), system-ui, sans-serif;
-  --font-display: var(--font-fraunces);
+  --font-sans: var(--font-cabinet), system-ui, sans-serif;
+  --font-display: var(--font-fraunces), Georgia, serif;
   --font-mono: var(--font-mono-custom);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -28,7 +41,6 @@
   --color-border: var(--border);
   --color-destructive: var(--destructive);
   --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
   --color-muted: var(--muted);
   --color-secondary-foreground: var(--secondary-foreground);
@@ -46,98 +58,130 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  --shadow-card: var(--shadow-card-token);
+  --shadow-card-lg: var(--shadow-card-lg-token);
 }
 
-/* ─── Light ─── */
+/* ─── Light · Crema dominant ─── */
 :root {
-  --background:         #F8F7FF;
-  --foreground:         #111827;
+  /* Brand */
+  --bg-base:        #EDE5D8;                       /* Crema — app background */
+  --surface:        #F2EBDF;                       /* Crema soft — message area */
+  --surface-raised: #FAF5EC;                       /* Crema raised — cards, chips */
+  --ink:            #2E2A3F;                       /* Nocturno */
+  --ink-secondary:  #6E6878;                       /* Nocturno tinted — body */
+  --stone:          #A89E90;                       /* Piedra — secondary */
+  --accent:         #4A4560;                       /* Violeta — accents only */
+  --accent-soft:    rgba(74, 69, 96, 0.08);        /* Violeta wash */
+  --line:           rgba(168, 158, 144, 0.22);     /* Piedra 22% */
+  --line-strong:    rgba(168, 158, 144, 0.40);     /* Piedra 40% */
 
-  --card:               #FFFFFF;
-  --card-foreground:    #111827;
+  --shadow-card-token:    0 2px 8px rgba(46, 42, 63, 0.06);
+  --shadow-card-lg-token: 0 8px 24px rgba(46, 42, 63, 0.08);
 
-  --popover:            #FFFFFF;
-  --popover-foreground: #111827;
+  /* shadcn bridge */
+  --background:           var(--bg-base);
+  --foreground:           var(--ink);
 
-  --primary:            #7C3AED;
-  --primary-foreground: #FFFFFF;
+  --card:                 var(--surface-raised);
+  --card-foreground:      var(--ink);
 
-  --secondary:          #F3F4F6;
-  --secondary-foreground: #111827;
+  --popover:              var(--surface-raised);
+  --popover-foreground:   var(--ink);
 
-  --muted:              #F3F4F6;
-  --muted-foreground:   #6B7280;
+  --primary:              var(--ink);
+  --primary-foreground:   var(--bg-base);
 
-  --accent:             #7C3AED;
-  --accent-foreground:  #FFFFFF;
+  --secondary:            var(--surface);
+  --secondary-foreground: var(--ink);
 
-  --destructive:        oklch(0.577 0.245 27.325);
+  --muted:                var(--surface);
+  --muted-foreground:     var(--stone);
 
-  --border:             #E5E7EB;
-  --input:              #E5E7EB;
-  --ring:               #7C3AED;
+  --accent-foreground:    var(--bg-base);
 
-  --chart-1: #7C3AED;
-  --chart-2: #EC4899;
-  --chart-3: #06B6D4;
-  --chart-4: #22C55E;
-  --chart-5: #F59E0B;
+  --destructive:          #B45050;
 
-  --radius: 0.75rem;
+  --border:               var(--line);
+  --input:                var(--line);
+  --ring:                 var(--accent);
 
-  --sidebar:                    #F0EDFF;
-  --sidebar-foreground:         #111827;
-  --sidebar-primary:            #7C3AED;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent:             #EDE9FE;
-  --sidebar-accent-foreground:  #6D28D9;
-  --sidebar-border:             #DDD6FE;
-  --sidebar-ring:               #7C3AED;
+  --chart-1: #2E2A3F;
+  --chart-2: #4A4560;
+  --chart-3: #A89E90;
+  --chart-4: #6E6878;
+  --chart-5: #C9BFAE;
+
+  --radius: 0.875rem;   /* 14px */
+
+  --sidebar:                    var(--ink);
+  --sidebar-foreground:         var(--bg-base);
+  --sidebar-primary:            var(--accent);
+  --sidebar-primary-foreground: var(--bg-base);
+  --sidebar-accent:             rgba(237, 229, 216, 0.08);
+  --sidebar-accent-foreground:  var(--bg-base);
+  --sidebar-border:             rgba(237, 229, 216, 0.10);
+  --sidebar-ring:               var(--accent);
 }
 
-/* ─── Dark ─── */
+/* ─── Dark · Nocturno dominant ─── */
 .dark {
-  --background:         #0F0B1F;
-  --foreground:         #F9FAFB;
+  --bg-base:        #2E2A3F;
+  --surface:        #36324A;
+  --surface-raised: #3F3B55;
+  --ink:            #EDE5D8;
+  --ink-secondary:  #C9BFAE;
+  --stone:          #A89E90;
+  --accent:         #8A82A8;                       /* Violeta levantado para legibilidad */
+  --accent-soft:    rgba(138, 130, 168, 0.14);
+  --line:           rgba(237, 229, 216, 0.10);
+  --line-strong:    rgba(237, 229, 216, 0.22);
 
-  --card:               #1A1530;
-  --card-foreground:    #F9FAFB;
+  --shadow-card-token:    0 2px 8px rgba(0, 0, 0, 0.24);
+  --shadow-card-lg-token: 0 12px 32px rgba(0, 0, 0, 0.32);
 
-  --popover:            #1A1530;
-  --popover-foreground: #F9FAFB;
+  --background:           var(--bg-base);
+  --foreground:           var(--ink);
 
-  --primary:            #8B5CF6;
-  --primary-foreground: #FFFFFF;
+  --card:                 var(--surface-raised);
+  --card-foreground:      var(--ink);
 
-  --secondary:          #1E1B2E;
-  --secondary-foreground: #F9FAFB;
+  --popover:              var(--surface-raised);
+  --popover-foreground:   var(--ink);
 
-  --muted:              #1E1B2E;
-  --muted-foreground:   #9CA3AF;
+  --primary:              var(--ink);
+  --primary-foreground:   #2E2A3F;
 
-  --accent:             #8B5CF6;
-  --accent-foreground:  #FFFFFF;
+  --secondary:            var(--surface);
+  --secondary-foreground: var(--ink);
 
-  --destructive:        oklch(0.704 0.191 22.216);
+  --muted:                var(--surface);
+  --muted-foreground:     var(--stone);
 
-  --border:             #2D2A45;
-  --input:              rgba(255, 255, 255, 0.08);
-  --ring:               #8B5CF6;
+  --accent-foreground:    var(--bg-base);
 
-  --chart-1: #8B5CF6;
-  --chart-2: #F472B6;
-  --chart-3: #22D3EE;
-  --chart-4: #4ADE80;
-  --chart-5: #FCD34D;
+  --destructive:          #D98B8B;
 
-  --sidebar:                    #150F2C;
-  --sidebar-foreground:         #F9FAFB;
-  --sidebar-primary:            #8B5CF6;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent:             #1E1B2E;
-  --sidebar-accent-foreground:  #C4B5FD;
-  --sidebar-border:             #2D2A45;
-  --sidebar-ring:               #8B5CF6;
+  --border:               var(--line);
+  --input:                var(--line);
+  --ring:                 var(--accent);
+
+  --chart-1: #EDE5D8;
+  --chart-2: #8A82A8;
+  --chart-3: #A89E90;
+  --chart-4: #C9BFAE;
+  --chart-5: #6E6878;
+
+  /* Sidebar inverts in dark mode: Crema surface over Nocturno app body */
+  --sidebar:                    #EDE5D8;
+  --sidebar-foreground:         #2E2A3F;
+  --sidebar-primary:            var(--accent);
+  --sidebar-primary-foreground: #2E2A3F;
+  --sidebar-accent:             rgba(46, 42, 63, 0.08);
+  --sidebar-accent-foreground:  #2E2A3F;
+  --sidebar-border:             rgba(168, 158, 144, 0.30);
+  --sidebar-ring:               var(--accent);
 }
 
 @layer base {
@@ -146,8 +190,16 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "ss01", "cv11";
   }
   html {
     @apply font-sans;
   }
+}
+
+/* Fraunces is opt-in — apply `font-display` only on editorial moments
+   (page titles, big KPI numbers, empty-state headings). Everything else
+   stays in Cabinet Grotesk. */
+.font-display {
+  letter-spacing: -0.01em;
 }

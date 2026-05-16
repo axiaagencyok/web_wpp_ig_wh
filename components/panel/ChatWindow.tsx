@@ -12,7 +12,6 @@ interface Props {
   conversation: Conversation;
   onConversationUpdate: (updated: Partial<Conversation>) => void;
   onBack?: () => void;
-  onInfoToggle?: () => void;
 }
 
 function MessagesSkeleton() {
@@ -37,7 +36,7 @@ function MessagesSkeleton() {
   );
 }
 
-export function ChatWindow({ conversation, onConversationUpdate, onBack, onInfoToggle }: Props) {
+export function ChatWindow({ conversation, onConversationUpdate, onBack }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -113,22 +112,21 @@ export function ChatWindow({ conversation, onConversationUpdate, onBack, onInfoT
   }
 
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className="flex flex-col h-full bg-cream-raised">
       <ChatHeader
         conversation={conversation}
         onToggle={handleToggle}
         onConversationUpdate={handleContactUpdate}
         onBack={onBack}
-        onInfoToggle={onInfoToggle}
       />
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto bg-[#F8F5EF] dark:bg-[#0A0818]">
+      <div className="flex-1 overflow-y-auto bg-cream-soft">
         {loading ? (
           <MessagesSkeleton />
         ) : messages.length === 0 ? (
           <div className="flex justify-center pt-12">
-            <span className="text-sm text-gray-400 bg-white dark:bg-[#1A1530] border border-gray-100 dark:border-[#2D2A45] px-4 py-1.5 rounded-full shadow-sm">
+            <span className="text-[12.5px] text-stone bg-cream-raised border border-line px-4 py-1.5 rounded-full">
               Sin mensajes todavía
             </span>
           </div>

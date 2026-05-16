@@ -1,27 +1,32 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans, Fraunces } from "next/font/google";
+import { Fraunces } from "next/font/google";
+import localFont from "next/font/local";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
-const plusJakarta = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  variable: "--font-jakarta",
-  weight: ["400", "500", "600", "700", "800"],
+const cabinet = localFont({
+  src: [
+    { path: "../public/fonts/CabinetGrotesk-Regular.woff2", weight: "400", style: "normal" },
+    { path: "../public/fonts/CabinetGrotesk-Medium.woff2",  weight: "500", style: "normal" },
+    { path: "../public/fonts/CabinetGrotesk-Bold.woff2",    weight: "700", style: "normal" },
+  ],
+  variable: "--font-cabinet",
   display: "swap",
+  fallback: ["system-ui", "sans-serif"],
 });
 
 const fraunces = Fraunces({
   subsets: ["latin"],
   variable: "--font-fraunces",
-  weight: ["400", "600", "700"],
+  weight: ["400", "500", "600", "700"],
   style: ["normal", "italic"],
   display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Fenoma — WhatsApp Agent",
-  description: "Panel de gestión de WhatsApp con IA",
+  title: "Fenoma — Multi-canal",
+  description: "Soluciones con IA. Tu tiempo, de vuelta.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -29,7 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="es"
       suppressHydrationWarning
-      className={`${fraunces.variable} ${plusJakarta.variable} h-full`}
+      className={`${fraunces.variable} ${cabinet.variable} h-full`}
     >
       <body className="h-full font-sans antialiased">
         <ThemeProvider>

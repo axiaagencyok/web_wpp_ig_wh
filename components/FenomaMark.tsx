@@ -1,25 +1,57 @@
+type Tone = "nocturno" | "cream" | "auto";
+
 interface Props {
   size?: number;
+  tone?: Tone;
   className?: string;
+  ariaLabel?: string;
 }
 
-export function FenomaMark({ size = 16, className = "" }: Props) {
+const SRC: Record<Exclude<Tone, "auto">, string> = {
+  nocturno: "/brand/Fenoma%20Simbolo%20PNG.png",
+  cream:    "/brand/Fenoma%20Simbolo%20Blanco%3B%20Violeta.png",
+};
+
+export function FenomaMark({ size = 24, tone = "nocturno", className = "", ariaLabel }: Props) {
+  const isDecorative = !ariaLabel;
+
+  if (tone === "auto") {
+    return (
+      <span className={className} style={{ display: "inline-flex", lineHeight: 0 }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={SRC.nocturno}
+          alt={ariaLabel ?? ""}
+          aria-hidden={isDecorative ? "true" : undefined}
+          width={size}
+          height={size}
+          className="block dark:hidden object-contain"
+          style={{ width: size, height: size }}
+        />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={SRC.cream}
+          alt={ariaLabel ?? ""}
+          aria-hidden={isDecorative ? "true" : undefined}
+          width={size}
+          height={size}
+          className="hidden dark:block object-contain"
+          style={{ width: size, height: size }}
+        />
+      </span>
+    );
+  }
+
   return (
-    <svg
+    /* eslint-disable-next-line @next/next/no-img-element */
+    <img
+      src={SRC[tone]}
+      alt={ariaLabel ?? ""}
+      aria-hidden={isDecorative ? "true" : undefined}
       width={size}
       height={size}
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden="true"
-      className={className}
-    >
-      {/* Main leaf — curves from top-left, broad belly, tapers to tip */}
-      <path d="M12 3C9.2 3 7 5.2 7 8.2C7 10.6 8.4 12.7 10.4 13.8C9.6 15.5 8.5 16.9 7 17.8C9.8 17.5 12 15.9 13 13.7C13.3 13.8 13.7 13.8 14 13.8C16.8 13.8 19 11.6 19 8.8C19 5.5 15.9 3 12 3Z" />
-      {/* Inner fold — gives the double-leaf depth */}
-      <path
-        d="M10.5 13.8C9.9 11.5 10.1 9 11.2 6.8C9.6 8.4 9 10.9 9.7 13.3C9.9 13.5 10.2 13.7 10.5 13.8Z"
-        opacity="0.45"
-      />
-    </svg>
+      className={`object-contain ${className}`}
+      style={{ width: size, height: size }}
+    />
   );
 }
