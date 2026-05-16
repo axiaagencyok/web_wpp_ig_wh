@@ -7,50 +7,30 @@ interface Props {
   ariaLabel?: string;
 }
 
-const SRC: Record<Exclude<Tone, "auto">, string> = {
-  nocturno: "/brand/fenoma-symbol-ink.png",
-  cream:    "/brand/fenoma-symbol-cream.png",
+const SRC = "/brand/fenoma-symbol-ink.png";
+
+// The PNG has a transparent background with the Nocturno symbol painted in.
+// `invert` flips the dark pixels to cream while keeping the transparent areas
+// transparent — exactly what we need to put the mark on dark surfaces.
+const TONE_CLASS: Record<Exclude<Tone, "auto">, string> = {
+  nocturno: "",
+  cream:    "invert",
 };
 
 export function FenomaMark({ size = 24, tone = "nocturno", className = "", ariaLabel }: Props) {
   const isDecorative = !ariaLabel;
-
-  if (tone === "auto") {
-    return (
-      <span className={className} style={{ display: "inline-flex", lineHeight: 0 }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={SRC.nocturno}
-          alt={ariaLabel ?? ""}
-          aria-hidden={isDecorative ? "true" : undefined}
-          width={size}
-          height={size}
-          className="block dark:hidden object-contain"
-          style={{ width: size, height: size }}
-        />
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={SRC.cream}
-          alt={ariaLabel ?? ""}
-          aria-hidden={isDecorative ? "true" : undefined}
-          width={size}
-          height={size}
-          className="hidden dark:block object-contain"
-          style={{ width: size, height: size }}
-        />
-      </span>
-    );
-  }
+  const toneClass =
+    tone === "auto" ? "dark:invert" : TONE_CLASS[tone];
 
   return (
     /* eslint-disable-next-line @next/next/no-img-element */
     <img
-      src={SRC[tone]}
+      src={SRC}
       alt={ariaLabel ?? ""}
       aria-hidden={isDecorative ? "true" : undefined}
       width={size}
       height={size}
-      className={`object-contain ${className}`}
+      className={`object-contain ${toneClass} ${className}`}
       style={{ width: size, height: size }}
     />
   );
