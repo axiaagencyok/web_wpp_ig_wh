@@ -9,9 +9,10 @@ import type { Conversation, Message } from "@/types/database.types";
 interface Props {
   conversation: Conversation;
   onSaved: (updated: Partial<Conversation>) => void;
+  onClose?: () => void;
 }
 
-export function ContactPanel({ conversation, onSaved }: Props) {
+export function ContactPanel({ conversation, onSaved, onClose }: Props) {
   const [name, setName]     = useState(conversation.contact_name ?? "");
   const [email, setEmail]   = useState(conversation.contact_email ?? "");
   const [notes, setNotes]   = useState(conversation.notes ?? "");
@@ -104,10 +105,19 @@ export function ContactPanel({ conversation, onSaved }: Props) {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center px-5 py-4 border-b border-gray-100 dark:border-[#2D2A45] bg-white dark:bg-[#1A1530]">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-[#2D2A45] bg-white dark:bg-[#1A1530]">
         <h3 className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
           Info del contacto
         </h3>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-gray-200 dark:hover:bg-white/10 transition-all cursor-pointer"
+            title="Cerrar"
+          >
+            <X size={15} />
+          </button>
+        )}
       </div>
 
       {/* Avatar hero */}

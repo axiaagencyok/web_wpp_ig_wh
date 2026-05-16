@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { MoreVertical, ArrowLeft, Phone, Video, ChevronRight, Hand, AlertCircle, Star, Wifi } from "lucide-react";
+import { MoreVertical, ArrowLeft, Phone, Video, ChevronRight, Hand, AlertCircle, Star, Wifi, UserCircle } from "lucide-react";
 import { toast } from "sonner";
 import { AutomationToggle } from "./AutomationToggle";
 import { ContactSheet } from "./ContactSheet";
@@ -15,6 +15,7 @@ interface Props {
   onToggle: (paused: boolean) => void;
   onConversationUpdate: (updated: Partial<Conversation>) => void;
   onBack?: () => void;
+  onInfoToggle?: () => void;
 }
 
 const DEAL_OPTIONS: { value: DealStatus; label: string }[] = [
@@ -133,7 +134,7 @@ function DealStatusPills({
   );
 }
 
-export function ChatHeader({ conversation, onToggle, onConversationUpdate, onBack }: Props) {
+export function ChatHeader({ conversation, onToggle, onConversationUpdate, onBack, onInfoToggle }: Props) {
   const [menuOpen, setMenuOpen]   = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -194,7 +195,17 @@ export function ChatHeader({ conversation, onToggle, onConversationUpdate, onBac
           </button>
 
           <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Decorative call/video buttons — visible on xl screens (ContactPanel takes right column) */}
+            {/* Info toggle — xl only, opens/closes ContactPanel */}
+            {onInfoToggle && (
+              <button
+                onClick={onInfoToggle}
+                title="Info del contacto"
+                className="hidden xl:flex w-9 h-9 items-center justify-center rounded-full border border-gray-200 dark:border-[#2D2A45] text-gray-500 hover:text-violet-700 hover:bg-violet-50 hover:border-violet-200 dark:hover:bg-violet-900/20 dark:hover:text-violet-300 transition-all duration-200 cursor-pointer"
+              >
+                <UserCircle size={17} />
+              </button>
+            )}
+            {/* Decorative call/video buttons */}
             <button
               disabled
               title="Llamada (próximamente)"

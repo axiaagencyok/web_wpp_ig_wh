@@ -19,9 +19,11 @@ type ConvWithLastMsg = Conversation & {
 
 export default function DashboardPage() {
   const [selected, setSelected] = useState<Conversation | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
 
   function handleSelect(conv: ConvWithLastMsg) {
     setSelected(conv);
+    setPanelOpen(false); // reset panel when switching chat
   }
 
   function handleConversationUpdate(updated: Partial<Conversation>) {
@@ -31,6 +33,7 @@ export default function DashboardPage() {
 
   function handleBack() {
     setSelected(null);
+    setPanelOpen(false);
   }
 
   return (
@@ -62,19 +65,21 @@ export default function DashboardPage() {
             conversation={selected}
             onConversationUpdate={handleConversationUpdate}
             onBack={handleBack}
+            onInfoToggle={() => setPanelOpen((o) => !o)}
           />
         ) : (
           <EmptyState />
         )}
       </div>
 
-      {/* ── Contact panel — desktop right column (xl+) ── */}
-      {selected && (
+      {/* ── Contact panel — toggled right column (xl+) ── */}
+      {selected && panelOpen && (
         <div className="hidden xl:flex flex-col flex-shrink-0 w-[296px] border-l border-gray-100 dark:border-[#2D2A45] bg-white dark:bg-[#0F0B1F]">
           <ContactPanel
             key={selected.id}
             conversation={selected}
             onSaved={handleConversationUpdate}
+            onClose={() => setPanelOpen(false)}
           />
         </div>
       )}

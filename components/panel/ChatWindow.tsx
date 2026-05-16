@@ -12,6 +12,7 @@ interface Props {
   conversation: Conversation;
   onConversationUpdate: (updated: Partial<Conversation>) => void;
   onBack?: () => void;
+  onInfoToggle?: () => void;
 }
 
 function MessagesSkeleton() {
@@ -36,7 +37,7 @@ function MessagesSkeleton() {
   );
 }
 
-export function ChatWindow({ conversation, onConversationUpdate, onBack }: Props) {
+export function ChatWindow({ conversation, onConversationUpdate, onBack, onInfoToggle }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -118,6 +119,7 @@ export function ChatWindow({ conversation, onConversationUpdate, onBack }: Props
         onToggle={handleToggle}
         onConversationUpdate={handleContactUpdate}
         onBack={onBack}
+        onInfoToggle={onInfoToggle}
       />
 
       {/* Messages area */}
