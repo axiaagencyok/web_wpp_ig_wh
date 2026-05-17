@@ -291,7 +291,12 @@ export async function processCamiConversation(conversationId: string): Promise<v
   const nombre = conversation.contact_name ?? igUsername;
 
   // Tool loop
-  const loopMessages: Anthropic.MessageParam[] = [...history];
+  // On story reply turns, skip prior history so the model can't anchor to a
+  // previous product mentioned in earlier messages. The auto-clear of
+  // story_reply in the webhook ensures only this one turn is affected.
+  const loopMessages: Anthropic.MessageParam[] = hasStoryContext
+    ? [history[history.length - 1]]
+    : [...history];
   let finalText: string | null = null;
   let promptTokens = 0;
   let completionTokens = 0;
