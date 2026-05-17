@@ -15,6 +15,8 @@ interface TenantSettings {
   ig_agent_system_prompt: string | null;
   stories_context_general: string | null;
   stories_context_keywords: string | null;
+  ads_context_general: string | null;
+  ads_context_keywords: string | null;
   google_sheet_id: string | null;
   google_sheet_range: string;
   agent_enabled: boolean;
@@ -49,6 +51,8 @@ export default function SettingsPage() {
   const [igAgentPrompt, setIgAgentPrompt]           = useState("");
   const [storiesGeneral, setStoriesGeneral]         = useState("");
   const [storiesKeywords, setStoriesKeywords]       = useState("");
+  const [adsGeneral, setAdsGeneral]                 = useState("");
+  const [adsKeywords, setAdsKeywords]               = useState("");
 
   useEffect(() => {
     fetch("/api/settings")
@@ -64,6 +68,8 @@ export default function SettingsPage() {
         setIgAgentPrompt(data.ig_agent_system_prompt ?? "");
         setStoriesGeneral(data.stories_context_general ?? "");
         setStoriesKeywords(data.stories_context_keywords ?? "");
+        setAdsGeneral(data.ads_context_general ?? "");
+        setAdsKeywords(data.ads_context_keywords ?? "");
       })
       .catch((err) => toast.error((err as Error).message))
       .finally(() => setLoading(false));
@@ -83,6 +89,8 @@ export default function SettingsPage() {
           ig_agent_system_prompt:   igAgentPrompt || null,
           stories_context_general:  storiesGeneral || null,
           stories_context_keywords: storiesKeywords || null,
+          ads_context_general:      adsGeneral || null,
+          ads_context_keywords:     adsKeywords || null,
         }),
       });
       if (!res.ok) {
@@ -229,6 +237,47 @@ export default function SettingsPage() {
               />
               <p className="text-[10px] text-stone px-1">
                 Si publicás varios productos en el día, listá las palabras clave y qué producto representa cada una. Recordá pedir en la story que los seguidores respondan con la palabra clave (ej: &ldquo;Respondé VASOS para info&rdquo;). Ejemplo: &ldquo;VASOS: vasos de vidrio. JARROS: jarros de cerámica&rdquo;
+              </p>
+            </Field>
+          </section>
+
+          {/* ── Contexto de Ads ── */}
+          <section className="bg-card border border-border rounded-2xl p-5 space-y-4">
+            <div className="flex items-start gap-2">
+              <div className="w-7 h-7 rounded-lg bg-[#E1306C]/15 flex items-center justify-center flex-shrink-0 mt-0.5 text-[#E1306C]">
+                <Sparkles size={14} strokeWidth={1.8} />
+              </div>
+              <div>
+                <h2 className="text-[14px] font-medium text-ink">Contexto de Ads</h2>
+                <p className="text-[12px] text-stone mt-0.5 leading-relaxed">
+                  Pistas para Cami cuando un seguidor clickea un anuncio de Instagram. <strong>NO incluyas precios ni stock</strong> — esos siempre se traen del catálogo. El contexto solo le dice a Cami qué producto o tema buscar.
+                </p>
+              </div>
+            </div>
+
+            <Field label="Contexto general" icon={<Sparkles size={13} strokeWidth={1.8} />}>
+              <textarea
+                value={adsGeneral}
+                onChange={(e) => setAdsGeneral(e.target.value)}
+                placeholder="Estamos promocionando air fryers"
+                rows={3}
+                className={`${inputCls} resize-none leading-relaxed`}
+              />
+              <p className="text-[10px] text-stone px-1">
+                Describí qué se está promocionando en el ad actual. NO pongas precios ni stock — eso se trae solo desde el catálogo. Ejemplo: &ldquo;Estamos promocionando air fryers&rdquo;
+              </p>
+            </Field>
+
+            <Field label="Palabras clave" icon={<Sparkles size={13} strokeWidth={1.8} />}>
+              <textarea
+                value={adsKeywords}
+                onChange={(e) => setAdsKeywords(e.target.value)}
+                placeholder="AIR: air fryer Liliana. TV: televisor Samsung"
+                rows={4}
+                className={`${inputCls} resize-none leading-relaxed`}
+              />
+              <p className="text-[10px] text-stone px-1">
+                Si la campaña tiene varios productos, listá palabras clave y a qué producto representan. Ejemplo: &ldquo;AIR: air fryer Liliana. TV: televisor Samsung&rdquo;
               </p>
             </Field>
           </section>

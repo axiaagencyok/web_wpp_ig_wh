@@ -16,6 +16,7 @@ import {
   type UpdateContactInfoInput,
   type UpdateAgentPromptInput,
   type UpdateStoriesContextInput,
+  type UpdateAdsContextInput,
 } from "./admin-tools";
 import type { Conversation, Tenant } from "@/types/database.types";
 
@@ -329,6 +330,30 @@ async function executeTool(
     return `✅ Palabras clave de stories actualizadas.`;
   }
 
+  if (name === "update_ads_context_general") {
+    const { content } = input as unknown as UpdateAdsContextInput;
+
+    const { error } = await adminClient
+      .from("tenants")
+      .update({ ads_context_general: content })
+      .eq("id", tenantId);
+
+    if (error) return `Error al guardar el contexto general de ads: ${error.message}`;
+    return `✅ Contexto general de ads actualizado.`;
+  }
+
+  if (name === "update_ads_context_keywords") {
+    const { content } = input as unknown as UpdateAdsContextInput;
+
+    const { error } = await adminClient
+      .from("tenants")
+      .update({ ads_context_keywords: content })
+      .eq("id", tenantId);
+
+    if (error) return `Error al guardar las palabras clave de ads: ${error.message}`;
+    return `✅ Palabras clave de ads actualizadas.`;
+  }
+
   if (name === "update_agent_prompt") {
     const { new_prompt } = input as unknown as UpdateAgentPromptInput;
 
@@ -393,8 +418,12 @@ Tenés acceso a las siguientes tools:
 - update_contact_info: actualiza nombre, email, notas, tags de un contacto.
 - update_stories_context_general: guarda qué producto o tema publicó hoy en stories (sin precios ni stock).
 - update_stories_context_keywords: guarda las palabras clave del día cuando hay varios productos en stories (sin precios ni stock).
+- update_ads_context_general: guarda qué producto o tema se está promocionando en el ad activo (sin precios ni stock).
+- update_ads_context_keywords: guarda las palabras clave del ad cuando hay varios productos en la campaña (sin precios ni stock).
 
-Cuando el dueño diga cosas como "subí stories de vasos hoy" o "hoy publiqué jarros", llamá update_stories_context_general con un texto descriptivo del producto o tema. Si el dueño aclara varias palabras clave (ej: "VASOS para los vasos, JARROS para los jarros"), usá update_stories_context_keywords. NUNCA incluyas precios ni stock en el contexto: eso siempre se trae del catálogo. No requieren confirmación: ejecutalas directamente y confirmá al admin.
+Cuando el dueño diga cosas como "subí stories de vasos hoy" o "hoy publiqué jarros", llamá update_stories_context_general con un texto descriptivo del producto o tema. Si el dueño aclara varias palabras clave (ej: "VASOS para los vasos, JARROS para los jarros"), usá update_stories_context_keywords.
+Cuando el dueño diga cosas como "empecé campaña de air fryers" o "lancé un ad de televisores", llamá update_ads_context_general. Si la campaña tiene varios productos con palabras clave (ej: "AIR para air fryer, TV para televisor"), usá update_ads_context_keywords.
+NUNCA incluyas precios ni stock en el contexto: eso siempre se trae del catálogo. No requieren confirmación: ejecutalas directamente y confirmá al admin.
 
 Para acciones destructivas (update_catalog_price, add_catalog_item, delete_catalog_item, send_message_to_contact) siempre mostrás un PREVIEW y esperás confirmación explícita ("sí", "confirmá", "dale") antes de ejecutar.
 REGLA CRÍTICA: Después de ejecutar CUALQUIER acción (tool call), SIEMPRE generá una respuesta de texto confirmando al admin qué hiciste, en lenguaje natural y concreto. Ejemplo: "Listo, actualicé el precio del iPhone 14 de $1.200.000 a $1.300.000." Si la acción falló, reportá el error con claridad. Nunca quedes en silencio después de una tool.

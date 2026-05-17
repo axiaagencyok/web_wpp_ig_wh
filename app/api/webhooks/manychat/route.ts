@@ -2,7 +2,7 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { adminClient } from "@/lib/supabase/admin";
 import { upsertBuffer } from "@/lib/ai/buffer";
 import { processInstagramMediaUrl, isInstagramMediaUrl } from "@/lib/instagram/media-processor";
-import { clearStoryReplyFlag } from "@/lib/instagram/manychat";
+import { clearStoryReplyFlag, clearAdClickFlag } from "@/lib/instagram/manychat";
 import type { Json } from "@/types/database.types";
 
 interface ManyChatPayload {
@@ -15,12 +15,17 @@ interface ManyChatPayload {
     custom_fields?: {
       producto_consultado?: string;
       story_reply?: boolean | string;
+      ad_click?: boolean | string;
     };
   };
 }
 
 function isStoryReply(v: boolean | string | undefined): boolean {
   return v === true || v === "true";
+}
+
+function parseAdClick(v: boolean | string | undefined): boolean {
+  return v === true || v === "true" || v === "Yes";
 }
 
 async function processIncoming(payload: ManyChatPayload): Promise<void> {
@@ -31,6 +36,7 @@ async function processIncoming(payload: ManyChatPayload): Promise<void> {
   const mensajeRaw = data.last_input_text ?? "";
   const productoConsultado = data.custom_fields?.producto_consultado ?? null;
   const storyReply = isStoryReply(data.custom_fields?.story_reply);
+  const adClick = parseAdClick(data.custom_fields?.ad_click);
 
   // Find tenant configured for Instagram (env: INSTAGRAM_TENANT_ID)
   const tenantId = process.env.INSTAGRAM_TENANT_ID;
@@ -82,6 +88,7 @@ async function processIncoming(payload: ManyChatPayload): Promise<void> {
     ig_username: igUsername,
     ...(productoConsultado ? { producto_consultado: productoConsultado } : {}),
     ...(storyReply ? { story_reply: true } : {}),
+    ...(adClick ? { ad_click: true } : {}),
   };
 
   // Upsert conversation
@@ -138,6 +145,13 @@ async function processIncoming(payload: ManyChatPayload): Promise<void> {
   if (storyReply) {
     clearStoryReplyFlag(manychatId).catch((e) =>
       console.error("[ig-webhook] clearStoryReplyFlag error:", (e as Error).message)
+    );
+  }
+
+  // Fire-and-forget: reset ad_click flag so it's consumed only once
+  if (adClick) {
+    clearAdClickFlag(manychatId).catch((e) =>
+      console.error("[ig-webhook] clearAdClickFlag error:", (e as Error).message)
     );
   }
 

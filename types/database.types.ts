@@ -26,6 +26,8 @@ export type Database = {
           ig_agent_system_prompt: string | null
           stories_context_general: string | null
           stories_context_keywords: string | null
+          ads_context_general: string | null
+          ads_context_keywords: string | null
           created_at: string
         }
         Insert: {
@@ -44,6 +46,8 @@ export type Database = {
           ig_agent_system_prompt?: string | null
           stories_context_general?: string | null
           stories_context_keywords?: string | null
+          ads_context_general?: string | null
+          ads_context_keywords?: string | null
           created_at?: string
         }
         Update: {
@@ -62,6 +66,8 @@ export type Database = {
           ig_agent_system_prompt?: string | null
           stories_context_general?: string | null
           stories_context_keywords?: string | null
+          ads_context_general?: string | null
+          ads_context_keywords?: string | null
           created_at?: string
         }
         Relationships: []
