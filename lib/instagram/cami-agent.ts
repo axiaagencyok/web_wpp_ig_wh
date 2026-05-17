@@ -221,6 +221,8 @@ function buildCamiHistory(
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export async function processCamiConversation(conversationId: string): Promise<void> {
+  console.error(`[cami][stories-debug] ENTRADA processCamiConversation conv=${conversationId}`);
+
   const { data: conversation } = await adminClient
     .from("conversations")
     .select("*")
@@ -249,9 +251,9 @@ export async function processCamiConversation(conversationId: string): Promise<v
   const storyKeywords = tenant?.stories_context_keywords?.trim();
   const hasStoryContext = isStoryReply && (storyGeneral || storyKeywords);
 
-  console.log(`[cami][stories-debug] conv=${conversationId} custom_fields=${JSON.stringify(customFields)}`);
-  console.log(`[cami][stories-debug] tenant.stories_context_general="${tenant?.stories_context_general ?? "NULL"}" | tenant.stories_context_keywords="${tenant?.stories_context_keywords ?? "NULL"}"`);
-  console.log(`[cami][stories-debug] inyectando contexto=${hasStoryContext} | isStoryReply=${isStoryReply}(tipo:${typeof customFields.story_reply}) | storyGeneral=${!!storyGeneral} | storyKeywords=${!!storyKeywords}`);
+  console.error(`[cami][stories-debug] conv=${conversationId} custom_fields=${JSON.stringify(customFields)}`);
+  console.error(`[cami][stories-debug] tenant.stories_context_general="${tenant?.stories_context_general ?? "NULL"}" | tenant.stories_context_keywords="${tenant?.stories_context_keywords ?? "NULL"}"`);
+  console.error(`[cami][stories-debug] inyectando contexto=${hasStoryContext} | isStoryReply=${isStoryReply}(tipo:${typeof customFields.story_reply}) | storyGeneral=${!!storyGeneral} | storyKeywords=${!!storyKeywords}`);
 
   const storyContextBlock = hasStoryContext
     ? `\n\n---\nCONTEXTO DE STORIES (HOY):\n` +
