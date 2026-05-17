@@ -221,8 +221,6 @@ function buildCamiHistory(
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export async function processCamiConversation(conversationId: string): Promise<void> {
-  console.error(`[cami][stories-debug] ENTRADA processCamiConversation conv=${conversationId}`);
-
   const { data: conversation } = await adminClient
     .from("conversations")
     .select("*")
@@ -251,25 +249,25 @@ export async function processCamiConversation(conversationId: string): Promise<v
   const storyKeywords = tenant?.stories_context_keywords?.trim();
   const hasStoryContext = isStoryReply && (storyGeneral || storyKeywords);
 
-  console.error(`[cami][stories-debug] conv=${conversationId} custom_fields=${JSON.stringify(customFields)}`);
-  console.error(`[cami][stories-debug] tenant.stories_context_general="${tenant?.stories_context_general ?? "NULL"}" | tenant.stories_context_keywords="${tenant?.stories_context_keywords ?? "NULL"}"`);
-  console.error(`[cami][stories-debug] inyectando contexto=${hasStoryContext} | isStoryReply=${isStoryReply}(tipo:${typeof customFields.story_reply}) | storyGeneral=${!!storyGeneral} | storyKeywords=${!!storyKeywords}`);
-
   const storyContextBlock = hasStoryContext
-    ? `\n\n---\nCONTEXTO DE STORIES (HOY):\n` +
-      (storyGeneral ? `Contexto general: ${storyGeneral}\n` : "") +
-      (storyKeywords ? `Palabras clave: ${storyKeywords}\n` : "") +
-      `\nEl contexto te dice de qué PRODUCTO o TEMA se está hablando — NO contiene precios ni stock. ` +
-      `Identificá el producto y después usá get_catalogo para traer precio, stock, descripción y detalles REALES. ` +
-      `Si el mensaje del cliente contiene una palabra clave del contexto de keywords, priorizá esa interpretación. ` +
-      `Si no, usá el contexto general. Si nada aplica, seguí el flow normal del catálogo.`
+    ? `\n\n================================================================\nCONTEXTO DE STORIES - PRIORIDAD ABSOLUTA\n================================================================\n` +
+      `El cliente acaba de responder a una story de Instagram.\n` +
+      `Esto es lo que se publicó hoy: ${storyGeneral ?? ""}` +
+      (storyKeywords ? `\nPalabras clave: ${storyKeywords}` : "") +
+      `\n\nINSTRUCCIONES CRÍTICAS — leer antes de responder:\n` +
+      `1. El cliente consulta por el/los producto(s) del contexto de arriba. Ese es el TEMA DE LA CONVERSACIÓN AHORA.\n` +
+      `2. Si en mensajes anteriores de esta conversación se mencionó otro producto distinto, OLVIDALO. Esa charla ya pasó. El cliente cambió de tema al responder la story.\n` +
+      `3. Si el mensaje del cliente contiene una palabra clave del listado de arriba, esa palabra define exactamente cuál producto del contexto está consultando. Si no, usá el contexto general.\n` +
+      `4. Usá get_catalogo INMEDIATAMENTE con el producto/keyword del contexto para traer precio, stock y descripción reales. Nunca inventes datos.\n` +
+      `5. Respondé pivoteando al producto del contexto. Ejemplo: si el contexto es 'air fryer' y el cliente pregunta 'cuánto sale?', la respuesta arranca con info de la air fryer, no del producto anterior.\n` +
+      `================================================================`
     : "";
 
   const fullSystemPrompt = SYSTEM_PROMPT_CAMI +
+    storyContextBlock +
     (tenant?.ig_agent_system_prompt?.trim()
       ? `\n\n---\nPERSONALIZACIÓN ADICIONAL:\n${tenant.ig_agent_system_prompt}`
-      : "") +
-    storyContextBlock;
+      : "");
 
   // Load recent messages
   const { data: rawMessages } = await adminClient

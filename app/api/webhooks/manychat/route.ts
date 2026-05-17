@@ -2,6 +2,7 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { adminClient } from "@/lib/supabase/admin";
 import { upsertBuffer } from "@/lib/ai/buffer";
 import { processInstagramMediaUrl, isInstagramMediaUrl } from "@/lib/instagram/media-processor";
+import { clearStoryReplyFlag } from "@/lib/instagram/manychat";
 import type { Json } from "@/types/database.types";
 
 interface ManyChatPayload {
@@ -131,6 +132,13 @@ async function processIncoming(payload: ManyChatPayload): Promise<void> {
   // Enqueue in buffer unless paused
   if (!conversation.automation_paused) {
     await upsertBuffer(conversation.id, tenant.buffer_seconds);
+  }
+
+  // Fire-and-forget: reset story_reply flag so it's consumed only once
+  if (storyReply) {
+    clearStoryReplyFlag(manychatId).catch((e) =>
+      console.error("[ig-webhook] clearStoryReplyFlag error:", (e as Error).message)
+    );
   }
 
   console.log(

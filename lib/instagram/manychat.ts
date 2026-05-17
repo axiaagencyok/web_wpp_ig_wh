@@ -66,3 +66,36 @@ export async function resumeInstagramBot(subscriberId: string): Promise<void> {
     throw new Error(`ManyChat resumeBot failed ${res.status}: ${body}`);
   }
 }
+
+/**
+ * Resets the story_reply custom field to false for a given subscriber.
+ * Called fire-and-forget after processing a story reply so the flag is
+ * consumed only once and doesn't bleed into subsequent messages.
+ */
+export async function clearStoryReplyFlag(subscriberId: string): Promise<void> {
+  const key = process.env.MANYCHAT_API_KEY;
+  if (!key) {
+    console.error("[manychat] MANYCHAT_API_KEY not set — cannot clear story_reply flag");
+    return;
+  }
+
+  const res = await fetch(`${MANYCHAT_API_BASE}/fb/subscriber/setCustomFieldByName`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      subscriber_id: subscriberId,
+      field_name: "story_reply",
+      field_value: false,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error(`[manychat] clearStoryReplyFlag failed ${res.status}: ${body}`);
+  } else {
+    console.log(`[manychat] story_reply cleared for subscriber ${subscriberId}`);
+  }
+}
