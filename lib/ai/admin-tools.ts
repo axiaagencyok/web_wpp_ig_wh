@@ -231,6 +231,45 @@ export const ADMIN_TOOL_DEFINITIONS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "update_ads_context_general",
+    description:
+      "Guarda el contexto general del anuncio (ad) activo. " +
+      "Describe QUÉ PRODUCTO o TEMA se está promocionando en el ad. " +
+      "NO incluyas precios ni stock — esos siempre se traen del catálogo. " +
+      "Ejemplo válido: 'Estamos promocionando air fryers'. " +
+      "Ejemplo inválido: 'Air fryers a $50.000' (NO hardcodear precios). " +
+      "No requiere confirmación: ejecutá directamente.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        content: {
+          type: "string",
+          description: "Texto descriptivo del producto o tema del ad activo. Sin precios ni stock.",
+        },
+      },
+      required: ["content"],
+    },
+  },
+  {
+    name: "update_ads_context_keywords",
+    description:
+      "Guarda las palabras clave del anuncio (ad) activo cuando se promocionan varios productos. " +
+      "Listá las palabras clave que identifican cada producto del ad. " +
+      "NO incluyas precios ni stock. " +
+      "Ejemplo válido: 'AIR: air fryer Liliana. TV: televisor Samsung'. " +
+      "No requiere confirmación: ejecutá directamente.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        content: {
+          type: "string",
+          description: "Listado de palabras clave y qué producto del ad representa cada una.",
+        },
+      },
+      required: ["content"],
+    },
+  },
+  {
     name: "update_contact_info",
     description: "Actualiza la información CRM de un contacto (nombre, email, notas, tags).",
     input_schema: {
@@ -302,6 +341,10 @@ export interface UpdateAgentPromptInput {
 }
 
 export interface UpdateStoriesContextInput {
+  content: string;
+}
+
+export interface UpdateAdsContextInput {
   content: string;
 }
 

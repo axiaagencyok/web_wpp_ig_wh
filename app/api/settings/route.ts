@@ -10,6 +10,8 @@ const patchSchema = z.object({
   ig_agent_system_prompt:   z.string().max(4000).nullable().optional(),
   stories_context_general:  z.string().max(4000).nullable().optional(),
   stories_context_keywords: z.string().max(4000).nullable().optional(),
+  ads_context_general:      z.string().max(4000).nullable().optional(),
+  ads_context_keywords:     z.string().max(4000).nullable().optional(),
 });
 
 export async function GET() {
@@ -29,7 +31,7 @@ export async function GET() {
 
     const { data: tenant, error: tenantErr } = await adminClient
       .from("tenants")
-      .select("id, name, whatsapp_number, admin_phone, admin_system_prompt, agent_system_prompt, ig_agent_system_prompt, stories_context_general, stories_context_keywords, google_sheet_id, google_sheet_range, agent_enabled")
+      .select("id, name, whatsapp_number, admin_phone, admin_system_prompt, agent_system_prompt, ig_agent_system_prompt, stories_context_general, stories_context_keywords, ads_context_general, ads_context_keywords, google_sheet_id, google_sheet_range, agent_enabled")
       .eq("id", userRow.tenant_id)
       .single();
 
@@ -69,7 +71,7 @@ export async function PATCH(req: NextRequest) {
       .from("tenants")
       .update(parsed.data)
       .eq("id", userRow.tenant_id)
-      .select("id, admin_phone, admin_system_prompt, agent_system_prompt, ig_agent_system_prompt, stories_context_general, stories_context_keywords")
+      .select("id, admin_phone, admin_system_prompt, agent_system_prompt, ig_agent_system_prompt, stories_context_general, stories_context_keywords, ads_context_general, ads_context_keywords")
       .single();
 
     if (error) {

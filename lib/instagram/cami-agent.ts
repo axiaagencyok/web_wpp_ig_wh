@@ -239,15 +239,23 @@ export async function processCamiConversation(conversationId: string): Promise<v
 
   const { data: tenant } = await adminClient
     .from("tenants")
-    .select("ig_agent_system_prompt, stories_context_general, stories_context_keywords")
+    .select("ig_agent_system_prompt, stories_context_general, stories_context_keywords, ads_context_general, ads_context_keywords")
     .eq("id", conversation.tenant_id)
     .single();
 
   const customFields = (conversation.custom_fields as Record<string, unknown> | null) ?? {};
   const isStoryReply = customFields.story_reply === true;
+  const isAdClick = customFields.ad_click === true;
+
+  // Stories fields
   const storyGeneral = tenant?.stories_context_general?.trim();
   const storyKeywords = tenant?.stories_context_keywords?.trim();
   const hasStoryContext = isStoryReply && (storyGeneral || storyKeywords);
+
+  // Ads fields — only active when story_reply is NOT also true (story has priority)
+  const adsGeneral = tenant?.ads_context_general?.trim();
+  const adsKeywords = tenant?.ads_context_keywords?.trim();
+  const hasAdsContext = !isStoryReply && isAdClick && (adsGeneral || adsKeywords);
 
   const storyContextBlock = hasStoryContext
     ? `\n\n================================================================\nCONTEXTO DE STORIES - PRIORIDAD ABSOLUTA\n================================================================\n` +
@@ -263,8 +271,23 @@ export async function processCamiConversation(conversationId: string): Promise<v
       `================================================================`
     : "";
 
+  const adsContextBlock = hasAdsContext
+    ? `\n\n================================================================\nCONTEXTO DE ADS - PRIORIDAD ABSOLUTA\n================================================================\n` +
+      `El cliente acaba de clickear un anuncio de Instagram. Esto es lo que se está promocionando:\n\n` +
+      `${adsGeneral ?? ""}` +
+      (adsKeywords ? `\nPalabras clave: ${adsKeywords}` : "") +
+      `\n\nINSTRUCCIONES CRÍTICAS:\n` +
+      `1. El cliente está consultando por el/los producto(s) del ad. NO sigas temas previos.\n` +
+      `2. Si en mensajes anteriores se mencionó otro producto, OLVIDALO.\n` +
+      `3. Si el mensaje contiene una palabra clave del listado, esa define el producto exacto.\n` +
+      `4. Usá get_catalogo INMEDIATAMENTE con el producto del contexto.\n` +
+      `5. Respondé pivoteando al producto del ad.\n` +
+      `================================================================`
+    : "";
+
   const fullSystemPrompt = SYSTEM_PROMPT_CAMI +
     storyContextBlock +
+    adsContextBlock +
     (tenant?.ig_agent_system_prompt?.trim()
       ? `\n\n---\nPERSONALIZACIÓN ADICIONAL:\n${tenant.ig_agent_system_prompt}`
       : "");
@@ -291,10 +314,10 @@ export async function processCamiConversation(conversationId: string): Promise<v
   const nombre = conversation.contact_name ?? igUsername;
 
   // Tool loop
-  // On story reply turns, skip prior history so the model can't anchor to a
-  // previous product mentioned in earlier messages. The auto-clear of
-  // story_reply in the webhook ensures only this one turn is affected.
-  const loopMessages: Anthropic.MessageParam[] = hasStoryContext
+  // On story reply or ad click turns, skip prior history so the model can't
+  // anchor to a previous product. The auto-clear in the webhook ensures only
+  // this one turn is affected.
+  const loopMessages: Anthropic.MessageParam[] = (hasStoryContext || hasAdsContext)
     ? [history[history.length - 1]]
     : [...history];
   let finalText: string | null = null;

@@ -99,3 +99,36 @@ export async function clearStoryReplyFlag(subscriberId: string): Promise<void> {
     console.log(`[manychat] story_reply cleared for subscriber ${subscriberId}`);
   }
 }
+
+/**
+ * Resets the ad_click custom field to false for a given subscriber.
+ * Called fire-and-forget after processing an ad click so the flag is
+ * consumed only once and doesn't bleed into subsequent messages.
+ */
+export async function clearAdClickFlag(subscriberId: string): Promise<void> {
+  const key = process.env.MANYCHAT_API_KEY;
+  if (!key) {
+    console.error("[manychat] MANYCHAT_API_KEY not set — cannot clear ad_click flag");
+    return;
+  }
+
+  const res = await fetch(`${MANYCHAT_API_BASE}/fb/subscriber/setCustomFieldByName`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      subscriber_id: subscriberId,
+      field_name: "ad_click",
+      field_value: false,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error(`[manychat] clearAdClickFlag failed ${res.status}: ${body}`);
+  } else {
+    console.log(`[manychat] ad_click cleared for subscriber ${subscriberId}`);
+  }
+}
