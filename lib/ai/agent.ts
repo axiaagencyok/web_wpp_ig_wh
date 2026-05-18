@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { adminClient } from "@/lib/supabase/admin";
-import { LUCAS_SYSTEM_PROMPT } from "./lucas-prompt";
+import { getLucasSystemPrompt } from "./lucas-prompt";
 import { getMessagingProvider } from "@/lib/messaging";
 import { getTenantCatalog } from "./business-context";
 import { buildImageContentBlock, buildAudioText, transcribePendingAudio } from "./media-handler";
@@ -191,14 +191,12 @@ export async function runAgent(
 
   const loopMessages: Anthropic.MessageParam[] = [...messageHistory];
 
+  const tenantSystemPrompt = getLucasSystemPrompt(tenant);
+
   for (let iteration = 0; iteration < 10; iteration++) {
     const response = await callClaude({
       max_tokens: 4096,
-      system: LUCAS_SYSTEM_PROMPT +
-        (tenant.agent_system_prompt?.trim()
-          ? `\n\n---\nPERSONALIZACIÓN ADICIONAL:\n${tenant.agent_system_prompt}`
-          : "") +
-        AGENT_BASE_RULES,
+      system: tenantSystemPrompt + AGENT_BASE_RULES,
       tools: TOOL_DEFINITIONS,
       messages: loopMessages,
     });

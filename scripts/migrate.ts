@@ -5,12 +5,32 @@
  *
  * Uso:
  *   SUPABASE_ACCESS_TOKEN=sbp_xxx npx ts-node --skip-project scripts/migrate.ts
+ *
+ * El project ref se resuelve en este orden:
+ *   1. process.env.SUPABASE_PROJECT_REF
+ *   2. subdominio de NEXT_PUBLIC_SUPABASE_URL (https://<ref>.supabase.co)
  */
 
 import fs from "fs";
 import path from "path";
 
-const PROJECT_REF = "alfmwtzlvljzuojnfxog";
+function resolveProjectRef(): string {
+  const explicit = process.env.SUPABASE_PROJECT_REF?.trim();
+  if (explicit) return explicit;
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  if (url) {
+    const match = url.match(/^https?:\/\/([^.]+)\.supabase\.co/i);
+    if (match?.[1]) return match[1];
+  }
+
+  console.error(
+    "❌ No se pudo resolver el project ref. Definí SUPABASE_PROJECT_REF o NEXT_PUBLIC_SUPABASE_URL."
+  );
+  process.exit(1);
+}
+
+const PROJECT_REF = resolveProjectRef();
 const ACCESS_TOKEN = process.env.SUPABASE_ACCESS_TOKEN;
 
 if (!ACCESS_TOKEN) {
