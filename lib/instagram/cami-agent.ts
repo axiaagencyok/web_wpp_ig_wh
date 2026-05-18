@@ -7,127 +7,46 @@ import { sendInstagramMessage, pauseInstagramBot, clearPostContextFlag } from ".
 const MODEL = "claude-sonnet-4-5";
 const FALLBACK_MODEL = "claude-haiku-4-5-20251001";
 const RETRY_DELAYS_MS = [1_000, 3_000, 9_000];
-const CATALOG_SHEET_ID = process.env.INSTAGRAM_CATALOG_SHEET_ID ?? "1c7DpWjA7mi18Ii1oyqNnYqKALhOQDnRF1k7Bcfucm0Y";
-const CATALOG_RANGE = process.env.INSTAGRAM_CATALOG_RANGE ?? "Lista de Precios";
-const SUPERVISOR_EMAIL = process.env.SUPERVISOR_EMAIL ?? "axiaagencyok@gmail.com";
 const MAX_HISTORY_TURNS = 6; // 3 turnos = 6 mensajes (user + assistant)
 
-const SYSTEM_PROMPT_CAMI = `Sos Cami, la asistente virtual de White Diamond, una tienda de tecnología ubicada en zona oeste del Gran Buenos Aires que vende electrónica y productos tecnológicos en general, con envíos a todo el país.
+function requireEnv(name: string): string {
+  const v = process.env[name];
+  if (!v || !v.trim()) {
+    throw new Error(`[cami] Variable de entorno requerida no definida: ${name}`);
+  }
+  return v;
+}
 
-Tu rol es atender a los clientes que escriben por Instagram de forma amable, clara y profesional. Tu tono es cercano pero serio, nunca informal en exceso.
-
----
-
-REGLA MÁS IMPORTANTE:
-
-Para cualquier consulta sobre productos, precios o disponibilidad, SIEMPRE consultá primero la herramienta del catálogo antes de responder. Nunca respondas precios ni disponibilidad de memoria ni de conversaciones anteriores. El catálogo se actualiza en tiempo real desde una planilla — un producto que existía antes puede no estar más, y los precios pueden haber cambiado.
-
-USO DE LA HERRAMIENTA:
-- Si el cliente pregunta por algo específico (producto, categoría, marca, modelo), usá get_catalogo con busqueda='[término en singular]'. Ej: busqueda='licuadora', busqueda='samsung', busqueda='heladera'.
-- Si la búsqueda devuelve resultados: mostrá esos productos.
-- Si la búsqueda devuelve el catálogo completo con la advertencia "BÚSQUEDA SIN RESULTADO EXACTO": REVISÁ CADA LÍNEA del catálogo completo antes de concluir que no hay productos. Buscá sinónimos, categorías relacionadas, o productos que sirvan para lo mismo. NUNCA digas "no tenemos" basándote solo en que la búsqueda exacta falló.
-- Si el cliente pide ver todo: usá get_catalogo sin busqueda.
-
----
-
-PROTOCOLO ANTI-ERROR (CRÍTICO — LEER SIEMPRE):
-
-Antes de decir "no tenemos" sobre cualquier producto, SEGUÍ ESTE PROTOCOLO obligatoriamente:
-
-PASO 1: Consultá el catálogo y leé la lista COMPLETA de productos antes de responder. El catálogo puede tener 200+ productos — prestá atención especial a los del MEDIO de la lista, no solo a los del principio y el final.
-
-PASO 2: Buscá en la lista CUALQUIER producto que pueda razonablemente cubrir lo que pidió el cliente. Considerá:
-- Categoría general: si pide "tostadora eléctrica", buscá TOSTADORA aunque no diga "eléctrica". Los adjetivos descriptivos NO son filtros.
-- Sinónimos coloquiales: "tele" = "TV" = "televisor" = "smart tv". "Celu" = "celular" = "teléfono". "Heladera" = "refrigerador". "Planchita" = "planchita de pelo". "Pava" = "PAVA ELECTRICA" = "jarra eléctrica". "Auriculares" = "auricular" = "headphones" = "earbuds".
-- Si el cliente dice una palabra y el catálogo tiene un producto cuyo nombre CONTIENE esa palabra, es un match. "Pavas" → "PAVA ELECTRICA" → MATCH.
-- Plurales y singulares, tildes y mayúsculas NO importan al matchear.
-- Marca específica: si pide "Samsung", buscá en cualquier categoría.
-
-PASO 3: Si encontrás algo que matchea aunque sea por aproximación, MOSTRALO DIRECTAMENTE sin decir primero "no tenemos". Ir directo a los productos.
-
-PASO 4: Solo decí "no tenemos disponible esta semana" cuando hayas revisado TODA la lista y realmente no haya nada — ni por categoría, ni por sinónimo, ni por aproximación.
-
-PASO 5: Si pide un modelo muy específico que no está, decile pero ofrecele alternativas similares de esa categoría.
-
-REGLA DE ORO: si dudás entre "no tenemos" o mostrar productos, SIEMPRE mostralos. NUNCA digas "no tenemos" si encontraste productos de esa categoría, aunque el nombre no sea idéntico al que pidió el cliente.
-
----
-
-REGLAS DE PRESENTACIÓN:
-
-- Si pregunta por una categoría, mostrale TODOS los productos de esa categoría.
-- Si pregunta por una marca, mostrale TODOS los productos de esa marca.
-- No resumas ni filtres por tu cuenta.
-- NUNCA inventes productos que no estén en el catálogo.
-
----
-
-CASOS ESPECIALES DE ANUNCIOS:
-
-Si aparece [CONTEXTO: el cliente está respondiendo a un anuncio del producto: XXX], el cliente vino desde un anuncio de Instagram sobre ese producto. Buscalo en el catálogo y respondé directamente con sus datos. Si no está, ofrecé alternativas.
-
----
-
-INFO CLAVE DEL NEGOCIO:
-
-- Nombre: White Diamond
-- Ubicación: Zona Oeste, Gran Buenos Aires
-- Envíos: a todo el país
-- Garantía: NO menciones ni ofrezcas garantía oficial bajo ninguna circunstancia
-- Formas de pago: efectivo, Mercado Pago, plazo 7 a 15 días
-- Precios en pesos argentinos. iPhones y productos en dólares: precio al dólar blue del día.
-
----
-
-CUÁNDO DERIVAR AL SUPERVISOR:
-
-Derivás cuando:
-- El cliente quiere cerrar una compra o coordinar una entrega
-- Quiere comprar al por mayor
-- Tiene un problema, queja o reclamo
-- Consulta muy técnica que no podés responder con certeza
-- El cliente está molesto
-
-Cuando esto ocurra, respondé lo apropiado y escribí EXACTAMENTE (sin modificar):
-Te derivaré con un supervisor.
-
----
-
-ESTILO DE RESPUESTA:
-
-- Mensajes cortos y directos, sin párrafos largos
-- Emojis con moderación (1 o 2 por mensaje máximo)
-- Siempre terminá con una pregunta o llamado a la acción claro
-- Si el cliente mandó un audio o imagen, procesalo y respondé normalmente`;
-
-const TOOL_DEFINITIONS: Anthropic.Tool[] = [
-  {
-    name: "get_catalogo",
-    description:
-      "Catálogo de productos de White Diamond con precios actualizados en tiempo real.\n\n" +
-      "CUÁNDO usar busqueda (RECOMENDADO para consultas específicas):\n" +
-      "- El cliente pregunta por un producto o categoría específica → busqueda='licuadora'\n" +
-      "- El cliente pregunta por una marca → busqueda='samsung'\n" +
-      "- El cliente pregunta por un modelo → busqueda='galaxy a15'\n" +
-      "Usá el nombre en SINGULAR y sin adjetivos. Ejemplos: 'licuadora' no 'licuadoras baratas'.\n\n" +
-      "CUÁNDO NO usar busqueda:\n" +
-      "- El cliente pregunta qué tienen en general o pide ver todo el catálogo.\n\n" +
-      "Si la búsqueda no encuentra resultados exactos, recibirás el catálogo completo con una advertencia. " +
-      "En ese caso REVISÁ TODA LA LISTA línea por línea antes de decir que no hay productos.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        busqueda: {
-          type: "string",
-          description:
-            "Término a buscar en todas las columnas del catálogo (tipo, marca, producto, descripción). " +
-            "Usar singular sin adjetivos. Ej: 'licuadora', 'heladera', 'samsung', 'galaxy a15'.",
+function buildToolDefinitions(tenantName: string): Anthropic.Tool[] {
+  return [
+    {
+      name: "get_catalogo",
+      description:
+        `Catálogo de productos de ${tenantName} con precios actualizados en tiempo real.\n\n` +
+        "CUÁNDO usar busqueda (RECOMENDADO para consultas específicas):\n" +
+        "- El cliente pregunta por un producto o categoría específica → busqueda='licuadora'\n" +
+        "- El cliente pregunta por una marca → busqueda='samsung'\n" +
+        "- El cliente pregunta por un modelo → busqueda='galaxy a15'\n" +
+        "Usá el nombre en SINGULAR y sin adjetivos. Ejemplos: 'licuadora' no 'licuadoras baratas'.\n\n" +
+        "CUÁNDO NO usar busqueda:\n" +
+        "- El cliente pregunta qué tienen en general o pide ver todo el catálogo.\n\n" +
+        "Si la búsqueda no encuentra resultados exactos, recibirás el catálogo completo con una advertencia. " +
+        "En ese caso REVISÁ TODA LA LISTA línea por línea antes de decir que no hay productos.",
+      input_schema: {
+        type: "object" as const,
+        properties: {
+          busqueda: {
+            type: "string",
+            description:
+              "Término a buscar en todas las columnas del catálogo (tipo, marca, producto, descripción). " +
+              "Usar singular sin adjetivos. Ej: 'licuadora', 'heladera', 'samsung', 'galaxy a15'.",
+          },
         },
+        required: [],
       },
-      required: [],
     },
-  },
-];
+  ];
+}
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -182,10 +101,12 @@ async function sendSupervisorEmail(nombre: string, igUsername: string): Promise<
     return;
   }
 
+  const supervisorEmail = requireEnv("SUPERVISOR_EMAIL");
+
   try {
     await transporter.sendMail({
       from: process.env.SMTP_USER,
-      to: SUPERVISOR_EMAIL,
+      to: supervisorEmail,
       subject: "Supervision",
       text: `El cliente ${nombre}, con usuario @${igUsername} solicitó atención por parte de un supervisor.`,
     });
@@ -239,9 +160,24 @@ export async function processCamiConversation(conversationId: string): Promise<v
 
   const { data: tenant } = await adminClient
     .from("tenants")
-    .select("ig_agent_system_prompt, stories_context_general, stories_context_keywords, ads_context_general, ads_context_keywords")
+    .select("name, ig_agent_system_prompt, stories_context_general, stories_context_keywords, ads_context_general, ads_context_keywords")
     .eq("id", conversation.tenant_id)
     .single();
+
+  const basePrompt = tenant?.ig_agent_system_prompt?.trim();
+  if (!basePrompt) {
+    throw new Error(
+      `Tenant ${conversation.tenant_id} no tiene ig_agent_system_prompt configurado en DB.`
+    );
+  }
+  const tenantName = tenant?.name?.trim();
+  if (!tenantName) {
+    throw new Error(`Tenant ${conversation.tenant_id} no tiene name configurado en DB.`);
+  }
+
+  const catalogSheetId = requireEnv("INSTAGRAM_CATALOG_SHEET_ID");
+  const catalogRange = requireEnv("INSTAGRAM_CATALOG_RANGE");
+  const toolDefinitions = buildToolDefinitions(tenantName);
 
   const customFields = (conversation.custom_fields as Record<string, unknown> | null) ?? {};
   const isStoryReply = customFields.story_reply === true;
@@ -304,13 +240,10 @@ export async function processCamiConversation(conversationId: string): Promise<v
       `================================================================`
     : "";
 
-  const fullSystemPrompt = SYSTEM_PROMPT_CAMI +
+  const fullSystemPrompt = basePrompt +
     storyContextBlock +
     adsContextBlock +
-    postContextBlock +
-    (tenant?.ig_agent_system_prompt?.trim()
-      ? `\n\n---\nPERSONALIZACIÓN ADICIONAL:\n${tenant.ig_agent_system_prompt}`
-      : "");
+    postContextBlock;
 
   const anyContext = hasStoryContext || hasAdsContext || hasPostContext;
 
@@ -384,7 +317,7 @@ export async function processCamiConversation(conversationId: string): Promise<v
     const response = await callClaude({
       max_tokens: 1024,
       system: fullSystemPrompt,
-      tools: TOOL_DEFINITIONS,
+      tools: toolDefinitions,
       messages: loopMessages,
     });
 
@@ -414,8 +347,8 @@ export async function processCamiConversation(conversationId: string): Promise<v
           try {
             const { busqueda } = block.input as { busqueda?: string };
             result = busqueda?.trim()
-              ? await searchCatalogFullText(CATALOG_SHEET_ID, CATALOG_RANGE, busqueda)
-              : await getCatalog(CATALOG_SHEET_ID, CATALOG_RANGE);
+              ? await searchCatalogFullText(catalogSheetId, catalogRange, busqueda)
+              : await getCatalog(catalogSheetId, catalogRange);
           } catch (e) {
             result = `Error obteniendo catálogo: ${(e as Error).message}`;
           }
