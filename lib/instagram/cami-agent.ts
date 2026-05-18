@@ -298,6 +298,19 @@ export async function processCamiConversation(conversationId: string): Promise<v
       ? `\n\n---\nPERSONALIZACIÓN ADICIONAL:\n${tenant.ig_agent_system_prompt}`
       : "");
 
+  // Clear consumed flags from local DB so the next message doesn't inherit them.
+  // We've already read isStoryReply / isAdClick above, so clearing here is safe.
+  if (isStoryReply || isAdClick) {
+    const clearedFields: Record<string, unknown> = { ...customFields };
+    if (isStoryReply) clearedFields.story_reply = false;
+    if (isAdClick) clearedFields.ad_click = false;
+    await adminClient
+      .from("conversations")
+      .update({ custom_fields: clearedFields as import("@/types/database.types").Json })
+      .eq("id", conversationId);
+    console.log(`[cami] Cleared flags in local DB for conv ${conversationId} (story_reply=${isStoryReply} ad_click=${isAdClick})`);
+  }
+
   // Load recent messages
   const { data: rawMessages } = await adminClient
     .from("messages")
