@@ -263,6 +263,7 @@ export async function processCamiConversation(conversationId: string): Promise<v
   // Context comes hardcoded in the ManyChat automation, not from tenants table.
   const hasPostContext = !isStoryReply && !isAdClick && isPostComment && !!rawPostContext && rawPostContext !== "-";
 
+
   const storyContextBlock = hasStoryContext
     ? `\n\n================================================================\nCONTEXTO DE STORIES - PRIORIDAD ABSOLUTA\n================================================================\n` +
       `El cliente acaba de responder a una story de Instagram.\n` +
