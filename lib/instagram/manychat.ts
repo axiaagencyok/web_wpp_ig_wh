@@ -132,3 +132,47 @@ export async function clearAdClickFlag(subscriberId: string): Promise<void> {
     console.log(`[manychat] ad_click cleared for subscriber ${subscriberId}`);
   }
 }
+
+/**
+ * Resets post_comment to false and post_context to "-" for a given subscriber.
+ * Called fire-and-forget after processing a post/reel comment so the flags are
+ * consumed only once and don't bleed into subsequent messages.
+ */
+export async function clearPostContextFlag(subscriberId: string): Promise<void> {
+  const key = process.env.MANYCHAT_API_KEY;
+  if (!key) {
+    console.error("[manychat] MANYCHAT_API_KEY not set — cannot clear post_comment flag");
+    return;
+  }
+
+  const base = `${MANYCHAT_API_BASE}/fb/subscriber/setCustomFieldByName`;
+  const headers = {
+    Authorization: `Bearer ${key}`,
+    "Content-Type": "application/json",
+  };
+
+  const [r1, r2] = await Promise.all([
+    fetch(base, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ subscriber_id: subscriberId, field_name: "post_comment", field_value: false }),
+    }),
+    fetch(base, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ subscriber_id: subscriberId, field_name: "post_context", field_value: "-" }),
+    }),
+  ]);
+
+  if (!r1.ok) {
+    const body = await r1.text().catch(() => "");
+    console.error(`[manychat] clearPostContextFlag (post_comment) failed ${r1.status}: ${body}`);
+  }
+  if (!r2.ok) {
+    const body = await r2.text().catch(() => "");
+    console.error(`[manychat] clearPostContextFlag (post_context) failed ${r2.status}: ${body}`);
+  }
+  if (r1.ok && r2.ok) {
+    console.log(`[manychat] post_comment/post_context cleared for subscriber ${subscriberId}`);
+  }
+}

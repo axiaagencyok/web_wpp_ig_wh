@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import nodemailer from "nodemailer";
 import { adminClient } from "@/lib/supabase/admin";
 import { getCatalog, searchCatalogFullText } from "@/lib/google/sheets";
-import { sendInstagramMessage, pauseInstagramBot } from "./manychat";
+import { sendInstagramMessage, pauseInstagramBot, clearPostContextFlag } from "./manychat";
 
 const MODEL = "claude-sonnet-4-5";
 const FALLBACK_MODEL = "claude-haiku-4-5-20251001";
@@ -246,6 +246,8 @@ export async function processCamiConversation(conversationId: string): Promise<v
   const customFields = (conversation.custom_fields as Record<string, unknown> | null) ?? {};
   const isStoryReply = customFields.story_reply === true;
   const isAdClick = customFields.ad_click === true;
+  const isPostComment = customFields.post_comment === true;
+  const rawPostContext = typeof customFields.post_context === "string" ? customFields.post_context : "";
 
   // Stories fields
   const storyGeneral = tenant?.stories_context_general?.trim();
@@ -256,6 +258,11 @@ export async function processCamiConversation(conversationId: string): Promise<v
   const adsGeneral = tenant?.ads_context_general?.trim();
   const adsKeywords = tenant?.ads_context_keywords?.trim();
   const hasAdsContext = !isStoryReply && isAdClick && (adsGeneral || adsKeywords);
+
+  // Post/Reel comment context — active only when neither story nor ad takes priority.
+  // Context comes hardcoded in the ManyChat automation, not from tenants table.
+  const hasPostContext = !isStoryReply && !isAdClick && isPostComment && !!rawPostContext && rawPostContext !== "-";
+
 
   const storyContextBlock = hasStoryContext
     ? `\n\n================================================================\nCONTEXTO DE STORIES - PRIORIDAD ABSOLUTA\n================================================================\n` +
@@ -285,24 +292,44 @@ export async function processCamiConversation(conversationId: string): Promise<v
       `================================================================`
     : "";
 
+  const postContextBlock = hasPostContext
+    ? `\n\n================================================================\nCONTEXTO DE POSTS/REELS - PRIORIDAD ABSOLUTA\n================================================================\n` +
+      `El cliente acaba de comentar en un post o reel de Instagram. El post/reel es sobre:\n\n` +
+      `${rawPostContext}` +
+      `\n\nINSTRUCCIONES CRÍTICAS:\n` +
+      `1. El cliente está consultando por el/los producto(s) del post. NO sigas temas previos.\n` +
+      `2. Si en mensajes anteriores se mencionó otro producto, OLVIDALO.\n` +
+      `3. Usá get_catalogo INMEDIATAMENTE con el producto del contexto.\n` +
+      `4. Respondé pivoteando al producto del post/reel.\n` +
+      `================================================================`
+    : "";
+
   const fullSystemPrompt = SYSTEM_PROMPT_CAMI +
     storyContextBlock +
     adsContextBlock +
+    postContextBlock +
     (tenant?.ig_agent_system_prompt?.trim()
       ? `\n\n---\nPERSONALIZACIÓN ADICIONAL:\n${tenant.ig_agent_system_prompt}`
       : "");
 
   // Clear consumed flags from local DB so the next message doesn't inherit them.
-  // We've already read isStoryReply / isAdClick above, so clearing here is safe.
-  if (isStoryReply || isAdClick) {
+  if (isStoryReply || isAdClick || hasPostContext) {
     const clearedFields: Record<string, unknown> = { ...customFields };
     if (isStoryReply) clearedFields.story_reply = false;
     if (isAdClick) clearedFields.ad_click = false;
+    if (hasPostContext) {
+      clearedFields.post_comment = false;
+      clearedFields.post_context = "-";
+      // Also clear in ManyChat fire-and-forget
+      clearPostContextFlag(conversation.contact_phone.replace("instagram:", "")).catch((e) =>
+        console.error("[cami] clearPostContextFlag error:", (e as Error).message)
+      );
+    }
     await adminClient
       .from("conversations")
       .update({ custom_fields: clearedFields as import("@/types/database.types").Json })
       .eq("id", conversationId);
-    console.log(`[cami] Cleared flags in local DB for conv ${conversationId} (story_reply=${isStoryReply} ad_click=${isAdClick})`);
+    console.log(`[cami] Cleared flags in local DB for conv ${conversationId} (story_reply=${isStoryReply} ad_click=${isAdClick} post_comment=${hasPostContext})`);
   }
 
   // Load recent messages
@@ -327,10 +354,10 @@ export async function processCamiConversation(conversationId: string): Promise<v
   const nombre = conversation.contact_name ?? igUsername;
 
   // Tool loop
-  // On story reply or ad click turns, skip prior history so the model can't
-  // anchor to a previous product. The auto-clear in the webhook ensures only
+  // On story reply, ad click, or post comment turns, skip prior history so the
+  // model can't anchor to a previous product. The auto-clear above ensures only
   // this one turn is affected.
-  const loopMessages: Anthropic.MessageParam[] = (hasStoryContext || hasAdsContext)
+  const loopMessages: Anthropic.MessageParam[] = (hasStoryContext || hasAdsContext || hasPostContext)
     ? [history[history.length - 1]]
     : [...history];
   let finalText: string | null = null;

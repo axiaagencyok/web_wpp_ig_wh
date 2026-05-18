@@ -2,7 +2,7 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { adminClient } from "@/lib/supabase/admin";
 import { upsertBuffer } from "@/lib/ai/buffer";
 import { processInstagramMediaUrl, isInstagramMediaUrl } from "@/lib/instagram/media-processor";
-import { clearStoryReplyFlag, clearAdClickFlag } from "@/lib/instagram/manychat";
+import { clearStoryReplyFlag, clearAdClickFlag, clearPostContextFlag } from "@/lib/instagram/manychat";
 import type { Json } from "@/types/database.types";
 
 interface ManyChatPayload {
@@ -16,6 +16,8 @@ interface ManyChatPayload {
       producto_consultado?: string;
       story_reply?: boolean | string;
       ad_click?: boolean | string;
+      post_comment?: boolean | string;
+      post_context?: string;
     };
   };
 }
@@ -37,6 +39,8 @@ async function processIncoming(payload: ManyChatPayload): Promise<void> {
   const productoConsultado = data.custom_fields?.producto_consultado ?? null;
   const storyReply = isStoryReply(data.custom_fields?.story_reply);
   const adClick = parseAdClick(data.custom_fields?.ad_click);
+  const postComment = parseAdClick(data.custom_fields?.post_comment);
+  const postContext = data.custom_fields?.post_context ?? null;
 
   // Find tenant configured for Instagram (env: INSTAGRAM_TENANT_ID)
   const tenantId = process.env.INSTAGRAM_TENANT_ID;
@@ -89,6 +93,8 @@ async function processIncoming(payload: ManyChatPayload): Promise<void> {
     ...(productoConsultado ? { producto_consultado: productoConsultado } : {}),
     ...(storyReply ? { story_reply: true } : {}),
     ...(adClick ? { ad_click: true } : {}),
+    ...(postComment ? { post_comment: true } : {}),
+    ...(postContext ? { post_context: postContext } : {}),
   };
 
   // Upsert conversation
@@ -152,6 +158,13 @@ async function processIncoming(payload: ManyChatPayload): Promise<void> {
   if (adClick) {
     clearAdClickFlag(manychatId).catch((e) =>
       console.error("[ig-webhook] clearAdClickFlag error:", (e as Error).message)
+    );
+  }
+
+  // Fire-and-forget: reset post_comment/post_context flags so they're consumed only once
+  if (postComment) {
+    clearPostContextFlag(manychatId).catch((e) =>
+      console.error("[ig-webhook] clearPostContextFlag error:", (e as Error).message)
     );
   }
 
