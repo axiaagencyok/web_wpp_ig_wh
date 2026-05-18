@@ -247,6 +247,9 @@ export async function processCamiConversation(conversationId: string): Promise<v
   const isStoryReply = customFields.story_reply === true;
   const isAdClick = customFields.ad_click === true;
 
+  // DEBUG — remove before merging to main
+  console.error(`[cami][ads-debug] conv=${conversationId} ad_click raw value=${JSON.stringify(customFields.ad_click)} type=${typeof customFields.ad_click} parsed=${isAdClick}`);
+
   // Stories fields
   const storyGeneral = tenant?.stories_context_general?.trim();
   const storyKeywords = tenant?.stories_context_keywords?.trim();
@@ -256,6 +259,9 @@ export async function processCamiConversation(conversationId: string): Promise<v
   const adsGeneral = tenant?.ads_context_general?.trim();
   const adsKeywords = tenant?.ads_context_keywords?.trim();
   const hasAdsContext = !isStoryReply && isAdClick && (adsGeneral || adsKeywords);
+
+  // DEBUG — remove before merging to main
+  console.error(`[cami][ads-debug] conv=${conversationId} isStoryReply=${isStoryReply} isAdClick=${isAdClick} hasAdsContext=${!!hasAdsContext} adsGeneral=${!!adsGeneral} adsKeywords=${!!adsKeywords}`);
 
   const storyContextBlock = hasStoryContext
     ? `\n\n================================================================\nCONTEXTO DE STORIES - PRIORIDAD ABSOLUTA\n================================================================\n` +
