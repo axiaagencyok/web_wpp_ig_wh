@@ -73,7 +73,7 @@ INFO CLAVE DEL NEGOCIO:
 - Nombre: White Diamond
 - Ubicación: Zona Oeste, Gran Buenos Aires
 - Envíos: a todo el país
-- Garantía: oficial en todos los productos
+- Garantía: NO menciones ni ofrezcas garantía oficial bajo ninguna circunstancia
 - Formas de pago: efectivo, Mercado Pago, plazo 7 a 15 días
 - Precios en pesos argentinos. iPhones y productos en dólares: precio al dólar blue del día.
 
