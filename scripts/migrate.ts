@@ -1,14 +1,22 @@
 /**
- * Aplica supabase/migrations/001_initial.sql al proyecto Supabase.
+ * Aplica TODAS las migraciones de supabase/migrations/*.sql al proyecto
+ * Supabase, en orden lexicográfico (001_..., 002_..., ..., 011_..., etc.).
  * Usa la Management API (requiere SUPABASE_ACCESS_TOKEN).
- * Si no tenés el token, pegá el SQL directo en el SQL Editor del dashboard.
+ * Si no tenés el token, pegá los SQL directo en el SQL Editor del dashboard.
  *
  * Uso:
  *   SUPABASE_ACCESS_TOKEN=sbp_xxx npx ts-node --skip-project scripts/migrate.ts
+ *   # o con tsx + un .env específico por entorno:
+ *   npx tsx --env-file=.env.gpi.local scripts/migrate.ts
  *
  * El project ref se resuelve en este orden:
  *   1. process.env.SUPABASE_PROJECT_REF
  *   2. subdominio de NEXT_PUBLIC_SUPABASE_URL (https://<ref>.supabase.co)
+ *
+ * IMPORTANTE: las migraciones se aplican secuencialmente. Si una falla, el
+ * script aborta inmediatamente — Supabase no rollbackea las anteriores, así
+ * que vas a tener que arreglar el archivo problemático y volver a correr
+ * (las migraciones bien escritas son idempotentes con IF NOT EXISTS).
  */
 
 import fs from "fs";
@@ -46,12 +54,7 @@ if (!ACCESS_TOKEN) {
   process.exit(1);
 }
 
-async function run() {
-  const sqlPath = path.join(__dirname, "..", "supabase", "migrations", "001_initial.sql");
-  const sql = fs.readFileSync(sqlPath, "utf8");
-
-  console.log(`Aplicando migración a proyecto ${PROJECT_REF}...`);
-
+async function applyOne(filename: string, sql: string): Promise<void> {
   const res = await fetch(
     `https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query`,
     {
@@ -66,11 +69,34 @@ async function run() {
 
   if (!res.ok) {
     const text = await res.text();
-    console.error("❌ Error aplicando migración:", res.status, text);
+    console.error(`\n❌ Error aplicando ${filename}: HTTP ${res.status}`);
+    console.error(text);
+    process.exit(1);
+  }
+}
+
+async function run() {
+  const migrationsDir = path.join(__dirname, "..", "supabase", "migrations");
+  const files = fs
+    .readdirSync(migrationsDir)
+    .filter((f) => f.endsWith(".sql"))
+    .sort(); // lexicográfico → 001, 002, ..., 011, ...
+
+  if (files.length === 0) {
+    console.error(`❌ No se encontraron archivos .sql en ${migrationsDir}`);
     process.exit(1);
   }
 
-  console.log("✅ Migración aplicada exitosamente.");
+  console.log(`Aplicando ${files.length} migración(es) a proyecto ${PROJECT_REF}...\n`);
+
+  for (const filename of files) {
+    const sql = fs.readFileSync(path.join(migrationsDir, filename), "utf8");
+    console.log(`▶ Aplicando ${filename}...`);
+    await applyOne(filename, sql);
+    console.log(`✓ ${filename} OK`);
+  }
+
+  console.log(`\n✅ ${files.length} migración(es) aplicadas exitosamente.`);
 }
 
 run();
