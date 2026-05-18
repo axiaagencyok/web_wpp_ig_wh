@@ -1,0 +1,2 @@
+ALTER TABLE conversations
+  ADD COLUMN IF NOT EXISTS last_context_trigger_at TIMESTAMPTZ DEFAULT NULL;
