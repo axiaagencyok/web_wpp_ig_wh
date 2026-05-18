@@ -312,33 +312,46 @@ export async function processCamiConversation(conversationId: string): Promise<v
       ? `\n\n---\nPERSONALIZACIÓN ADICIONAL:\n${tenant.ig_agent_system_prompt}`
       : "");
 
-  // Clear consumed flags from local DB so the next message doesn't inherit them.
-  if (isStoryReply || isAdClick || hasPostContext) {
+  const anyContext = hasStoryContext || hasAdsContext || hasPostContext;
+
+  // When a context trigger fires: stamp the moment and clear consumed flags.
+  // The timestamp becomes the "start of new thread" boundary for future history loads.
+  if (anyContext) {
+    const triggerAt = new Date().toISOString();
     const clearedFields: Record<string, unknown> = { ...customFields };
     if (isStoryReply) clearedFields.story_reply = false;
     if (isAdClick) clearedFields.ad_click = false;
     if (hasPostContext) {
       clearedFields.post_comment = false;
       clearedFields.post_context = "-";
-      // Also clear in ManyChat fire-and-forget
       clearPostContextFlag(conversation.contact_phone.replace("instagram:", "")).catch((e) =>
         console.error("[cami] clearPostContextFlag error:", (e as Error).message)
       );
     }
     await adminClient
       .from("conversations")
-      .update({ custom_fields: clearedFields as import("@/types/database.types").Json })
+      .update({
+        custom_fields: clearedFields as import("@/types/database.types").Json,
+        last_context_trigger_at: triggerAt,
+      })
       .eq("id", conversationId);
-    console.log(`[cami] Cleared flags in local DB for conv ${conversationId} (story_reply=${isStoryReply} ad_click=${isAdClick} post_comment=${hasPostContext})`);
+    console.log(`[cami] Context trigger stamped for conv ${conversationId} at ${triggerAt} (story=${isStoryReply} ad=${isAdClick} post=${hasPostContext})`);
   }
 
-  // Load recent messages
-  const { data: rawMessages } = await adminClient
+  // Load recent messages.
+  // On non-context turns, restrict history to messages after the last context trigger
+  // so prior-topic conversations don't pollute the new thread.
+  const triggerCutoff = anyContext ? null : (conversation.last_context_trigger_at as string | null ?? null);
+  let historyQuery = adminClient
     .from("messages")
     .select("direction, body, created_at")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
     .limit(MAX_HISTORY_TURNS);
+  if (triggerCutoff) {
+    historyQuery = historyQuery.gte("created_at", triggerCutoff);
+  }
+  const { data: rawMessages } = await historyQuery;
 
   const messages = (rawMessages ?? []).reverse();
 

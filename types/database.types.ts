@@ -118,6 +118,7 @@ export type Database = {
           deal_status: 'nuevo' | 'contactado' | 'esperando_pago' | 'pago_pendiente' | 'cerrado'
           channel: 'whatsapp' | 'instagram'
           last_message_at: string
+          last_context_trigger_at: string | null
           unread_count: number
           created_at: string
         }
@@ -137,6 +138,7 @@ export type Database = {
           deal_status?: 'nuevo' | 'contactado' | 'esperando_pago' | 'pago_pendiente' | 'cerrado'
           channel?: 'whatsapp' | 'instagram'
           last_message_at?: string
+          last_context_trigger_at?: string | null
           unread_count?: number
           created_at?: string
         }
@@ -156,6 +158,7 @@ export type Database = {
           deal_status?: 'nuevo' | 'contactado' | 'esperando_pago' | 'pago_pendiente' | 'cerrado'
           channel?: 'whatsapp' | 'instagram'
           last_message_at?: string
+          last_context_trigger_at?: string | null
           unread_count?: number
           created_at?: string
         }
