@@ -28,6 +28,10 @@ export type Database = {
           stories_context_keywords: string | null
           ads_context_general: string | null
           ads_context_keywords: string | null
+          catalog_source: Database['public']['Enums']['catalog_source_type']
+          catalog_pdf_path: string | null
+          catalog_text_cache: string | null
+          catalog_text_cached_at: string | null
           created_at: string
         }
         Insert: {
@@ -48,6 +52,10 @@ export type Database = {
           stories_context_keywords?: string | null
           ads_context_general?: string | null
           ads_context_keywords?: string | null
+          catalog_source?: Database['public']['Enums']['catalog_source_type']
+          catalog_pdf_path?: string | null
+          catalog_text_cache?: string | null
+          catalog_text_cached_at?: string | null
           created_at?: string
         }
         Update: {
@@ -68,6 +76,10 @@ export type Database = {
           stories_context_keywords?: string | null
           ads_context_general?: string | null
           ads_context_keywords?: string | null
+          catalog_source?: Database['public']['Enums']['catalog_source_type']
+          catalog_pdf_path?: string | null
+          catalog_text_cache?: string | null
+          catalog_text_cached_at?: string | null
           created_at?: string
         }
         Relationships: []
@@ -334,7 +346,7 @@ export type Database = {
       }
     }
     Enums: {
-      [_ in never]: never
+      catalog_source_type: 'sheets' | 'pdf'
     }
     CompositeTypes: {
       [_ in never]: never

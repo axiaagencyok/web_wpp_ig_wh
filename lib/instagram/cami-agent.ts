@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import nodemailer from "nodemailer";
 import { adminClient } from "@/lib/supabase/admin";
-import { getCatalog, searchCatalogFullText } from "@/lib/google/sheets";
+import { getCatalogText } from "@/lib/catalog/catalog-source";
 import { sendInstagramMessage, pauseInstagramBot, clearPostContextFlag } from "./manychat";
 
 const MODEL = "claude-sonnet-4-5";
@@ -160,23 +160,25 @@ export async function processCamiConversation(conversationId: string): Promise<v
 
   const { data: tenant } = await adminClient
     .from("tenants")
-    .select("name, ig_agent_system_prompt, stories_context_general, stories_context_keywords, ads_context_general, ads_context_keywords")
+    .select("*")
     .eq("id", conversation.tenant_id)
     .single();
 
-  const basePrompt = tenant?.ig_agent_system_prompt?.trim();
+  if (!tenant) {
+    throw new Error(`[cami] Tenant no encontrado: ${conversation.tenant_id}`);
+  }
+
+  const basePrompt = tenant.ig_agent_system_prompt?.trim();
   if (!basePrompt) {
     throw new Error(
       `Tenant ${conversation.tenant_id} no tiene ig_agent_system_prompt configurado en DB.`
     );
   }
-  const tenantName = tenant?.name?.trim();
+  const tenantName = tenant.name?.trim();
   if (!tenantName) {
     throw new Error(`Tenant ${conversation.tenant_id} no tiene name configurado en DB.`);
   }
 
-  const catalogSheetId = requireEnv("INSTAGRAM_CATALOG_SHEET_ID");
-  const catalogRange = requireEnv("INSTAGRAM_CATALOG_RANGE");
   const toolDefinitions = buildToolDefinitions(tenantName);
 
   const customFields = (conversation.custom_fields as Record<string, unknown> | null) ?? {};
@@ -346,9 +348,7 @@ export async function processCamiConversation(conversationId: string): Promise<v
         if (block.name === "get_catalogo") {
           try {
             const { busqueda } = block.input as { busqueda?: string };
-            result = busqueda?.trim()
-              ? await searchCatalogFullText(catalogSheetId, catalogRange, busqueda)
-              : await getCatalog(catalogSheetId, catalogRange);
+            result = await getCatalogText(tenant, { search: busqueda });
           } catch (e) {
             result = `Error obteniendo catálogo: ${(e as Error).message}`;
           }
