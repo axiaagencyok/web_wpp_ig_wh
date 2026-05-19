@@ -32,6 +32,8 @@ export type Database = {
           catalog_pdf_path: string | null
           catalog_text_cache: string | null
           catalog_text_cached_at: string | null
+          lead_notification_email: string | null
+          lead_scoring_prompt: string | null
           created_at: string
         }
         Insert: {
@@ -56,6 +58,8 @@ export type Database = {
           catalog_pdf_path?: string | null
           catalog_text_cache?: string | null
           catalog_text_cached_at?: string | null
+          lead_notification_email?: string | null
+          lead_scoring_prompt?: string | null
           created_at?: string
         }
         Update: {
@@ -80,6 +84,8 @@ export type Database = {
           catalog_pdf_path?: string | null
           catalog_text_cache?: string | null
           catalog_text_cached_at?: string | null
+          lead_notification_email?: string | null
+          lead_scoring_prompt?: string | null
           created_at?: string
         }
         Relationships: []
@@ -335,6 +341,90 @@ export type Database = {
           }
         ]
       }
+      Leads: {
+        Row: {
+          id: number
+          tenant_id: string
+          conversation_id: string | null
+          manychat_id: string | null
+          instagram_user: string | null
+          nombre: string | null
+          zona: string | null
+          tipo_proyecto: 'Obra nueva' | 'Refacción' | 'Comercial' | 'Otro' | null
+          m2_estimados: number | null
+          producto_interes: string | null
+          urgencia: 'Inmediata' | '1-3 meses' | '+3 meses' | null
+          lead_score: number | null
+          resumen_conversacion: string | null
+          estado: 'Nuevo' | 'Contactado' | 'Cerrado' | 'Descartado'
+          notas: string | null
+          es_recurrente: boolean
+          compras_anteriores: number
+          notificado_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          tenant_id: string
+          conversation_id?: string | null
+          manychat_id?: string | null
+          instagram_user?: string | null
+          nombre?: string | null
+          zona?: string | null
+          tipo_proyecto?: 'Obra nueva' | 'Refacción' | 'Comercial' | 'Otro' | null
+          m2_estimados?: number | null
+          producto_interes?: string | null
+          urgencia?: 'Inmediata' | '1-3 meses' | '+3 meses' | null
+          lead_score?: number | null
+          resumen_conversacion?: string | null
+          estado?: 'Nuevo' | 'Contactado' | 'Cerrado' | 'Descartado'
+          notas?: string | null
+          es_recurrente?: boolean
+          compras_anteriores?: number
+          notificado_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          tenant_id?: string
+          conversation_id?: string | null
+          manychat_id?: string | null
+          instagram_user?: string | null
+          nombre?: string | null
+          zona?: string | null
+          tipo_proyecto?: 'Obra nueva' | 'Refacción' | 'Comercial' | 'Otro' | null
+          m2_estimados?: number | null
+          producto_interes?: string | null
+          urgencia?: 'Inmediata' | '1-3 meses' | '+3 meses' | null
+          lead_score?: number | null
+          resumen_conversacion?: string | null
+          estado?: 'Nuevo' | 'Contactado' | 'Cerrado' | 'Descartado'
+          notas?: string | null
+          es_recurrente?: boolean
+          compras_anteriores?: number
+          notificado_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "Leads_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Leads_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -360,3 +450,5 @@ export type Conversation = Database['public']['Tables']['conversations']['Row']
 export type Message = Database['public']['Tables']['messages']['Row']
 export type MessageBuffer = Database['public']['Tables']['message_buffer']['Row']
 export type AiLog = Database['public']['Tables']['ai_logs']['Row']
+export type Lead = Database['public']['Tables']['Leads']['Row']
+export type LeadInsert = Database['public']['Tables']['Leads']['Insert']
