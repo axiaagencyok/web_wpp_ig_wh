@@ -1,7 +1,11 @@
 import { adminClient } from "@/lib/supabase/admin";
 import { getCatalog, searchCatalogFullText } from "@/lib/google/sheets";
-import { extractPdfText } from "./pdf-extractor";
 import type { Tenant } from "@/types/database.types";
+
+// `pdf-extractor` (y por transitividad `unpdf` + `pdfjs-dist`) se cargan vía
+// dynamic import dentro de la rama de PDF. Así, los tenants en modo 'sheets'
+// (caso típico de WHD) nunca evalúan ese módulo. Es defensa adicional contra
+// problemas de bundling de Next con paquetes que tocan APIs de DOM.
 
 /**
  * Abstracción de la fuente del catálogo. Esconde si el catálogo vive en
@@ -69,8 +73,10 @@ async function getPdfCatalogText(tenant: Tenant): Promise<string> {
     return cached;
   }
 
-  // Cache miss: descargar, extraer, guardar.
+  // Cache miss: descargar, extraer, guardar. Lazy import del extractor para
+  // no cargar `unpdf` / `pdfjs-dist` en flujos que no usan PDF.
   const buffer = await downloadPdf(pdfPath);
+  const { extractPdfText } = await import("./pdf-extractor");
   const text = await extractPdfText(buffer);
 
   const now = new Date().toISOString();

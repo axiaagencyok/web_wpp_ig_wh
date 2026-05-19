@@ -1,17 +1,17 @@
-import {
-  PDFParse,
-  InvalidPDFException,
-  PasswordException,
-  FormatError,
-} from "pdf-parse";
+import { extractText } from "unpdf";
 
 /**
- * Extrae el texto plano de un PDF.
+ * Extrae el texto plano de un PDF usando `unpdf` (PDF.js compilado para
+ * serverless — sin referencias a APIs de browser tipo DOMMatrix).
  *
- * Errores con mensajes claros para que un operador pueda diagnosticar
- * rápido sin abrir los logs internos de pdfjs:
+ * API pública estable: el resto del código sigue importando `extractPdfText`.
+ *
+ * Errores con mensajes claros para que un operador pueda diagnosticar rápido
+ * sin abrir los logs internos de pdfjs:
+ * - buffer vacío
  * - PDF corrupto / encabezado inválido
- * - PDF protegido por password (no soportamos password todavía)
+ * - PDF protegido por password
+ * - PDF malformado
  * - PDF sin texto seleccionable (escaneado, sólo imágenes) → resultado vacío
  */
 export async function extractPdfText(buffer: Buffer): Promise<string> {
@@ -19,39 +19,36 @@ export async function extractPdfText(buffer: Buffer): Promise<string> {
     throw new Error("[pdf-extractor] PDF vacío: el buffer no contiene datos.");
   }
 
-  const parser = new PDFParse({
-    data: new Uint8Array(buffer),
-  });
-
+  let result: { totalPages: number; text: string };
   try {
-    const result = await parser.getText();
-    const text = (result.text ?? "").trim();
-    if (text.length === 0) {
-      throw new Error(
-        "[pdf-extractor] PDF sin texto extraíble. Probablemente sea un PDF escaneado (sólo imágenes). Convertilo a PDF con OCR antes de subirlo."
-      );
-    }
-    return text;
+    result = await extractText(new Uint8Array(buffer), { mergePages: true });
   } catch (err) {
-    if (err instanceof InvalidPDFException) {
+    // pdfjs (que unpdf usa por dentro) tipa sus errores con `.name`. Las clases
+    // no se exportan desde unpdf, así que matcheamos por nombre.
+    const e = err as { name?: string; message?: string };
+    if (e?.name === "InvalidPDFException") {
       throw new Error(
-        `[pdf-extractor] El archivo no es un PDF válido (encabezado o estructura incorrecta): ${err.message}`
+        `[pdf-extractor] El archivo no es un PDF válido (encabezado o estructura incorrecta): ${e.message ?? ""}`.trim()
       );
     }
-    if (err instanceof PasswordException) {
+    if (e?.name === "PasswordException") {
       throw new Error(
         "[pdf-extractor] PDF protegido por contraseña. Subí una versión sin password."
       );
     }
-    if (err instanceof FormatError) {
+    if (e?.name === "FormatError") {
       throw new Error(
-        `[pdf-extractor] PDF malformado: ${err.message}. Intentá re-exportar el archivo desde la herramienta original.`
+        `[pdf-extractor] PDF malformado: ${e.message ?? ""}. Intentá re-exportar el archivo desde la herramienta original.`.trim()
       );
     }
     throw err;
-  } finally {
-    await parser.destroy().catch(() => {
-      /* swallow */
-    });
   }
+
+  const text = (result.text ?? "").trim();
+  if (text.length === 0) {
+    throw new Error(
+      "[pdf-extractor] PDF sin texto extraíble. Probablemente sea un PDF escaneado (sólo imágenes). Convertilo a PDF con OCR antes de subirlo."
+    );
+  }
+  return text;
 }
