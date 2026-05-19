@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["twilio", "googleapis"],
+  serverExternalPackages: ["twilio", "googleapis", "unpdf", "pdfjs-dist"],
   images: {
     remotePatterns: [
       {
