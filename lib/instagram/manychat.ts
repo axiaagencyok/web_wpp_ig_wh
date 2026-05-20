@@ -6,6 +6,19 @@ function apiKey(): string {
   return key;
 }
 
+// Error tipado para que los callers distingan 404 (no-grave, ej. subscriber
+// migrado al endpoint legacy) de errores graves (5xx, 401, timeout) y
+// decidan si vale la pena derivar a humano.
+export class ManyChatError extends Error {
+  constructor(public readonly status: number, public readonly body: string, message: string) {
+    super(message);
+    this.name = "ManyChatError";
+  }
+  get isTransient(): boolean {
+    return this.status >= 500 || this.status === 401 || this.status === 408 || this.status === 429;
+  }
+}
+
 export async function sendInstagramMessage(
   subscriberId: string,
   text: string
@@ -47,7 +60,7 @@ export async function pauseInstagramBot(subscriberId: string): Promise<void> {
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`ManyChat pauseBot failed ${res.status}: ${body}`);
+    throw new ManyChatError(res.status, body, `ManyChat pauseBot failed ${res.status}: ${body}`);
   }
 }
 
@@ -63,7 +76,7 @@ export async function resumeInstagramBot(subscriberId: string): Promise<void> {
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`ManyChat resumeBot failed ${res.status}: ${body}`);
+    throw new ManyChatError(res.status, body, `ManyChat resumeBot failed ${res.status}: ${body}`);
   }
 }
 
