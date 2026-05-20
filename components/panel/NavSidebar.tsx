@@ -28,10 +28,8 @@ import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 
-// `flag` opcional: si está, la entrada solo se renderiza cuando el flag del
-// tenant es true. Sin `flag` = visible para todos.
-type ChannelFlag = "instagram_enabled" | "whatsapp_enabled" | "meli_enabled";
-
+// Los canales se renderizan siempre. Si un tenant tiene el canal deshabilitado
+// la página correspondiente muestra su propio empty state.
 type NavIconProps = { size?: number; strokeWidth?: number; className?: string };
 
 const NAV_ITEMS: Array<{
@@ -39,11 +37,10 @@ const NAV_ITEMS: Array<{
   label: string;
   href: string;
   implemented: boolean;
-  flag?: ChannelFlag;
 }> = [
-  { icon: InstagramIcon, label: "Instagram",     href: "/instagram",  implemented: true, flag: "instagram_enabled" },
-  { icon: MessageSquare, label: "WhatsApp",      href: "/whatsapp",   implemented: true, flag: "whatsapp_enabled" },
-  { icon: ShoppingBag,   label: "Mercado Libre", href: "/meli",       implemented: true, flag: "meli_enabled" },
+  { icon: InstagramIcon, label: "Instagram",     href: "/instagram",  implemented: true  },
+  { icon: MessageSquare, label: "WhatsApp",      href: "/whatsapp",   implemented: true  },
+  { icon: ShoppingBag,   label: "Mercado Libre", href: "/meli",       implemented: true  },
   { icon: BarChart2,     label: "Analytics",     href: "/analytics",  implemented: true  },
   { icon: FileText,      label: "Plantillas",    href: "/templates",  implemented: false },
   { icon: Megaphone,     label: "Campañas",      href: "/campaigns",  implemented: false },
@@ -199,66 +196,8 @@ function AdminMenu() {
   );
 }
 
-type TenantFlags = {
-  instagram_enabled: boolean;
-  whatsapp_enabled: boolean;
-  meli_enabled: boolean;
-};
-
-const NO_FLAGS: TenantFlags = {
-  instagram_enabled: false,
-  whatsapp_enabled: false,
-  meli_enabled: false,
-};
-
 export function NavSidebar() {
   const pathname = usePathname();
-  const [flags, setFlags] = useState<TenantFlags | null>(null);
-
-  // Las flags resuelven a `null` hasta que la query termina; mientras tanto
-  // los items con `flag` se ocultan para no parpadear. Si el usuario no tiene
-  // tenant resoluble (p.ej. mid-login) tampoco se muestran — fail-closed.
-  useEffect(() => {
-    const supabase = createClient();
-    let cancelled = false;
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        if (!cancelled) setFlags(NO_FLAGS);
-        return;
-      }
-      const { data: row } = await supabase
-        .from("users")
-        .select("tenant_id")
-        .eq("id", user.id)
-        .maybeSingle();
-      if (!row?.tenant_id) {
-        if (!cancelled) setFlags(NO_FLAGS);
-        return;
-      }
-      const { data: tenant } = await supabase
-        .from("tenants")
-        .select("instagram_enabled, whatsapp_enabled, meli_enabled")
-        .eq("id", row.tenant_id)
-        .maybeSingle();
-      if (!cancelled) {
-        setFlags({
-          instagram_enabled: tenant?.instagram_enabled ?? false,
-          whatsapp_enabled: tenant?.whatsapp_enabled ?? false,
-          meli_enabled: tenant?.meli_enabled ?? false,
-        });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const visibleItems = NAV_ITEMS.filter((item) => {
-    if (!item.flag) return true;
-    if (!flags) return false; // mientras carga, ocultar
-    return flags[item.flag];
-  });
 
   return (
     <aside
@@ -272,7 +211,7 @@ export function NavSidebar() {
       <div className="h-4" aria-hidden="true" />
 
       <nav className="flex-1 px-2.5 py-2 flex flex-col gap-1">
-        {visibleItems.map(({ icon, label, href, implemented }) => {
+        {NAV_ITEMS.map(({ icon, label, href, implemented }) => {
           const isActive = pathname.startsWith(href);
           return (
             <NavItem
