@@ -36,6 +36,7 @@ export type Database = {
           lead_scoring_prompt: string | null
           meli_agent_system_prompt: string | null
           meli_auto_answer: boolean
+          meli_enabled: boolean
           created_at: string
         }
         Insert: {
@@ -64,6 +65,7 @@ export type Database = {
           lead_scoring_prompt?: string | null
           meli_agent_system_prompt?: string | null
           meli_auto_answer?: boolean
+          meli_enabled?: boolean
           created_at?: string
         }
         Update: {
@@ -92,6 +94,7 @@ export type Database = {
           lead_scoring_prompt?: string | null
           meli_agent_system_prompt?: string | null
           meli_auto_answer?: boolean
+          meli_enabled?: boolean
           created_at?: string
         }
         Relationships: []

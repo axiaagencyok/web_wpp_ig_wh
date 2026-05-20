@@ -101,7 +101,9 @@ END $$;
 
 ALTER TABLE tenants
   ADD COLUMN IF NOT EXISTS meli_agent_system_prompt text,
-  ADD COLUMN IF NOT EXISTS meli_auto_answer         boolean NOT NULL DEFAULT false;
+  ADD COLUMN IF NOT EXISTS meli_auto_answer         boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS meli_enabled             boolean NOT NULL DEFAULT false;
 
 COMMENT ON COLUMN tenants.meli_agent_system_prompt IS 'System prompt del agente MELI. Si NULL, el agente no genera respuestas para este tenant.';
 COMMENT ON COLUMN tenants.meli_auto_answer         IS 'Si true, el agente envía la respuesta directamente al cliente sin esperar aprobación humana.';
+COMMENT ON COLUMN tenants.meli_enabled             IS 'Feature flag UI: cuando false, la entrada "Mercado Libre" no aparece en la sidebar del panel para este tenant.';
