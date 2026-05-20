@@ -10,6 +10,7 @@ import {
   BarChart2,
   Settings,
   LogOut,
+  ShoppingBag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -17,6 +18,7 @@ import { toast } from "sonner";
 
 const NAV_ITEMS = [
   { icon: MessageSquare, label: "Chats",      href: "/dashboard",  implemented: true  },
+  { icon: ShoppingBag,   label: "Mercado Libre", href: "/meli",    implemented: true  },
   { icon: BarChart2,     label: "Analytics",  href: "/analytics",  implemented: true  },
   { icon: FileText,      label: "Plantillas", href: "/templates",  implemented: false },
   { icon: Megaphone,     label: "Campañas",   href: "/campaigns",  implemented: false },
