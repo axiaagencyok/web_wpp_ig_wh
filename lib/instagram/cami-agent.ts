@@ -1,7 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import nodemailer from "nodemailer";
+import { after } from "next/server";
 import { adminClient } from "@/lib/supabase/admin";
 import { getCatalogText } from "@/lib/catalog/catalog-source";
+import { scoreConversation } from "@/lib/leads/scoring-agent";
+import { upsertLead } from "@/lib/leads/upsert-lead";
 import { sendInstagramMessage, pauseInstagramBot, clearPostContextFlag } from "./manychat";
 
 const MODEL = "claude-sonnet-4-5";
@@ -427,6 +430,29 @@ export async function processCamiConversation(conversationId: string): Promise<v
       .eq("conversation_id", conversationId)
       .eq("direction", "outbound")
       .eq("status", "queued");
+  }
+
+  // ── Lead scoring (post-response, non-blocking) ──────────────────────────────
+  // Solo si el tenant tiene scoring habilitado (prompt cargado en DB). El call
+  // se difiere con `after()` para no demorar la respuesta del worker.
+  if (tenant.lead_scoring_prompt?.trim()) {
+    const scoringTask = async () => {
+      try {
+        const result = await scoreConversation(tenant, conversationId);
+        if (!result) return;
+        await upsertLead({ tenant, conversation, scoring: result });
+      } catch (e) {
+        console.error(`[cami] Lead-scoring task failed for conv ${conversationId}:`, (e as Error).message);
+      }
+    };
+
+    try {
+      after(scoringTask());
+    } catch {
+      // `after()` solo funciona dentro de un request context de Next. Si por
+      // algún motivo no estamos en uno (tests, scripts), caemos a fire-and-forget.
+      void scoringTask();
+    }
   }
 }
 
