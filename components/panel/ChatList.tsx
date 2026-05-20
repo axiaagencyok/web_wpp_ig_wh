@@ -276,13 +276,21 @@ function ConvItem({
 interface Props {
   selectedId: string | null;
   onSelect: (conv: ConvWithLastMsg) => void;
+  /**
+   * Si está seteado, el componente filtra a ese canal y NO renderiza el
+   * segmented control de canales. Pensado para las páginas mono-canal
+   * (/instagram, /whatsapp). Para la bandeja unificada se deja undefined.
+   */
+  fixedChannel?: Channel;
+  /** Override opcional del título de la sección (default: "Chats"). */
+  title?: string;
 }
 
-export function ChatList({ selectedId, onSelect }: Props) {
+export function ChatList({ selectedId, onSelect, fixedChannel, title }: Props) {
   const [conversations, setConversations] = useState<ConvWithLastMsg[]>([]);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<Tab>("all");
-  const [channel, setChannel] = useState<Channel>("whatsapp");
+  const [channel, setChannel] = useState<Channel>(fixedChannel ?? "whatsapp");
   const [loading, setLoading] = useState(true);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -426,37 +434,39 @@ export function ChatList({ selectedId, onSelect }: Props) {
 
       {/* ── Section title ── */}
       <div className="px-5 py-4 border-b border-line">
-        <h2 className="font-display text-[22px] text-ink leading-tight">Chats</h2>
+        <h2 className="font-display text-[22px] text-ink leading-tight">{title ?? "Chats"}</h2>
         {conversations.length > 0 && (
           <p className="text-[11px] text-stone mt-1">{conversations.length} chats</p>
         )}
       </div>
 
-      {/* ── Channel tabs — segmented control with bottom border ── */}
-      <div className="flex items-center gap-1 px-5 border-b border-line">
-        {([
-          { key: "whatsapp",  label: "WhatsApp",  Icon: WaIcon },
-          { key: "instagram", label: "Instagram", Icon: IgIcon },
-        ] as { key: Channel; label: string; Icon: typeof WaIcon }[]).map(({ key, label, Icon }) => {
-          const isActive = channel === key;
-          return (
-            <button
-              key={key}
-              onClick={() => setChannel(key)}
-              className={cn(
-                "flex items-center gap-1.5 py-3 px-2 text-[12.5px] cursor-pointer transition-colors",
-                "border-b-2 -mb-px",
-                isActive
-                  ? "border-ink text-ink font-medium"
-                  : "border-transparent text-stone hover:text-ink"
-              )}
-            >
-              <Icon size={12} active={isActive} />
-              {label}
-            </button>
-          );
-        })}
-      </div>
+      {/* ── Channel tabs — solo en modo bandeja unificada ─────────────────── */}
+      {!fixedChannel && (
+        <div className="flex items-center gap-1 px-5 border-b border-line">
+          {([
+            { key: "whatsapp",  label: "WhatsApp",  Icon: WaIcon },
+            { key: "instagram", label: "Instagram", Icon: IgIcon },
+          ] as { key: Channel; label: string; Icon: typeof WaIcon }[]).map(({ key, label, Icon }) => {
+            const isActive = channel === key;
+            return (
+              <button
+                key={key}
+                onClick={() => setChannel(key)}
+                className={cn(
+                  "flex items-center gap-1.5 py-3 px-2 text-[12.5px] cursor-pointer transition-colors",
+                  "border-b-2 -mb-px",
+                  isActive
+                    ? "border-ink text-ink font-medium"
+                    : "border-transparent text-stone hover:text-ink"
+                )}
+              >
+                <Icon size={12} active={isActive} />
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* ── Filter pills ── */}
       <div className="flex items-center gap-1.5 px-4 pt-3 pb-0">

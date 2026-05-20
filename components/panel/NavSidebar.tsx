@@ -12,20 +12,37 @@ import {
   LogOut,
   ShoppingBag,
 } from "lucide-react";
+
+// Lucide 1.14 no exporta brand icons — inlineamos el path de IG para el sidebar
+// con la misma forma que usa ChatList. Acepta `size` para encajar con NavItem.
+function InstagramIcon({ size = 20, strokeWidth = 1.6, className }: { size?: number; strokeWidth?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <rect width="20" height="20" x="2" y="2" rx="5" />
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+      <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+    </svg>
+  );
+}
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 
 // `flag` opcional: si está, la entrada solo se renderiza cuando el flag del
 // tenant es true. Sin `flag` = visible para todos.
+type ChannelFlag = "instagram_enabled" | "whatsapp_enabled" | "meli_enabled";
+
+type NavIconProps = { size?: number; strokeWidth?: number; className?: string };
+
 const NAV_ITEMS: Array<{
-  icon: typeof MessageSquare;
+  icon: React.ComponentType<NavIconProps>;
   label: string;
   href: string;
   implemented: boolean;
-  flag?: "meli_enabled";
+  flag?: ChannelFlag;
 }> = [
-  { icon: MessageSquare, label: "Chats",         href: "/dashboard",  implemented: true  },
+  { icon: InstagramIcon, label: "Instagram",     href: "/instagram",  implemented: true, flag: "instagram_enabled" },
+  { icon: MessageSquare, label: "WhatsApp",      href: "/whatsapp",   implemented: true, flag: "whatsapp_enabled" },
   { icon: ShoppingBag,   label: "Mercado Libre", href: "/meli",       implemented: true, flag: "meli_enabled" },
   { icon: BarChart2,     label: "Analytics",     href: "/analytics",  implemented: true  },
   { icon: FileText,      label: "Plantillas",    href: "/templates",  implemented: false },
@@ -182,7 +199,17 @@ function AdminMenu() {
   );
 }
 
-type TenantFlags = { meli_enabled: boolean };
+type TenantFlags = {
+  instagram_enabled: boolean;
+  whatsapp_enabled: boolean;
+  meli_enabled: boolean;
+};
+
+const NO_FLAGS: TenantFlags = {
+  instagram_enabled: false,
+  whatsapp_enabled: false,
+  meli_enabled: false,
+};
 
 export function NavSidebar() {
   const pathname = usePathname();
@@ -197,7 +224,7 @@ export function NavSidebar() {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        if (!cancelled) setFlags({ meli_enabled: false });
+        if (!cancelled) setFlags(NO_FLAGS);
         return;
       }
       const { data: row } = await supabase
@@ -206,15 +233,21 @@ export function NavSidebar() {
         .eq("id", user.id)
         .maybeSingle();
       if (!row?.tenant_id) {
-        if (!cancelled) setFlags({ meli_enabled: false });
+        if (!cancelled) setFlags(NO_FLAGS);
         return;
       }
       const { data: tenant } = await supabase
         .from("tenants")
-        .select("meli_enabled")
+        .select("instagram_enabled, whatsapp_enabled, meli_enabled")
         .eq("id", row.tenant_id)
         .maybeSingle();
-      if (!cancelled) setFlags({ meli_enabled: tenant?.meli_enabled ?? false });
+      if (!cancelled) {
+        setFlags({
+          instagram_enabled: tenant?.instagram_enabled ?? false,
+          whatsapp_enabled: tenant?.whatsapp_enabled ?? false,
+          meli_enabled: tenant?.meli_enabled ?? false,
+        });
+      }
     })();
     return () => {
       cancelled = true;
@@ -240,10 +273,7 @@ export function NavSidebar() {
 
       <nav className="flex-1 px-2.5 py-2 flex flex-col gap-1">
         {visibleItems.map(({ icon, label, href, implemented }) => {
-          const isActive =
-            href === "/dashboard"
-              ? pathname.startsWith("/dashboard")
-              : pathname.startsWith(href);
+          const isActive = pathname.startsWith(href);
           return (
             <NavItem
               key={label}

@@ -45,6 +45,8 @@ export type Database = {
           agent_business_hours_alert: boolean
           agent_temporary_closures: string | null
           agent_special_instructions: string | null
+          instagram_enabled: boolean
+          whatsapp_enabled: boolean
           created_at: string
         }
         Insert: {
@@ -82,6 +84,8 @@ export type Database = {
           agent_business_hours_alert?: boolean
           agent_temporary_closures?: string | null
           agent_special_instructions?: string | null
+          instagram_enabled?: boolean
+          whatsapp_enabled?: boolean
           created_at?: string
         }
         Update: {
@@ -119,6 +123,8 @@ export type Database = {
           agent_business_hours_alert?: boolean
           agent_temporary_closures?: string | null
           agent_special_instructions?: string | null
+          instagram_enabled?: boolean
+          whatsapp_enabled?: boolean
           created_at?: string
         }
         Relationships: []

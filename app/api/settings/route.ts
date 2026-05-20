@@ -8,10 +8,6 @@ const patchSchema = z.object({
   admin_phone:                 z.string().max(30).nullable().optional(),
   admin_system_prompt:         z.string().max(4000).nullable().optional(),
 
-  // Prompts crudos (tab Avanzado)
-  agent_system_prompt:         z.string().max(4000).optional(),
-  ig_agent_system_prompt:      z.string().max(4000).nullable().optional(),
-
   // Contextos dinámicos
   stories_context_general:     z.string().max(4000).nullable().optional(),
   stories_context_keywords:    z.string().max(4000).nullable().optional(),
@@ -19,6 +15,7 @@ const patchSchema = z.object({
   ads_context_keywords:        z.string().max(4000).nullable().optional(),
 
   // Catálogo
+  catalog_source:              z.enum(["sheets", "pdf"]).optional(),
   google_sheet_id:             z.string().max(200).nullable().optional(),
   google_sheet_range:          z.string().max(100).optional(),
 
@@ -33,6 +30,10 @@ const patchSchema = z.object({
   agent_business_hours_alert:  z.boolean().optional(),
   agent_temporary_closures:    z.string().max(500).nullable().optional(),
   agent_special_instructions:  z.string().max(500).nullable().optional(),
+
+  // Channel feature flags (migración 019)
+  instagram_enabled:           z.boolean().optional(),
+  whatsapp_enabled:            z.boolean().optional(),
 });
 
 export async function GET() {
@@ -59,12 +60,13 @@ export async function GET() {
           "whatsapp_number",
           "admin_phone",
           "admin_system_prompt",
-          "agent_system_prompt",
-          "ig_agent_system_prompt",
           "stories_context_general",
           "stories_context_keywords",
           "ads_context_general",
           "ads_context_keywords",
+          "catalog_source",
+          "catalog_pdf_path",
+          "catalog_text_cached_at",
           "google_sheet_id",
           "google_sheet_range",
           "agent_enabled",
@@ -76,6 +78,8 @@ export async function GET() {
           "agent_business_hours_alert",
           "agent_temporary_closures",
           "agent_special_instructions",
+          "instagram_enabled",
+          "whatsapp_enabled",
         ].join(", ")
       )
       .eq("id", userRow.tenant_id)

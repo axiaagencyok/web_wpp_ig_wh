@@ -13,11 +13,6 @@ import type { MeliAccount, MeliQuestion } from "@/types/database.types";
 
 type Tab = "pending" | "answered" | "settings";
 
-interface MeliTenantSettings {
-  meli_agent_system_prompt: string | null;
-  meli_auto_answer: boolean;
-}
-
 export default function MeliPage() {
   const supabase = useMemo(() => createClient(), []);
   const [tab, setTab] = useState<Tab>("pending");
@@ -389,8 +384,7 @@ function QuestionCard({ question, variant }: { question: MeliQuestion; variant: 
 
 function SettingsPanel() {
   const supabase = useMemo(() => createClient(), []);
-  const [settings, setSettings] = useState<MeliTenantSettings | null>(null);
-  const [draftPrompt, setDraftPrompt] = useState("");
+  const [original, setOriginal] = useState<boolean | null>(null);
   const [draftAuto, setDraftAuto] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -415,13 +409,12 @@ function SettingsPanel() {
       }
       const { data: t } = await supabase
         .from("tenants")
-        .select("meli_agent_system_prompt, meli_auto_answer")
+        .select("meli_auto_answer")
         .eq("id", u.tenant_id)
         .maybeSingle();
       if (cancelled) return;
       if (t) {
-        setSettings(t);
-        setDraftPrompt(t.meli_agent_system_prompt ?? "");
+        setOriginal(t.meli_auto_answer);
         setDraftAuto(t.meli_auto_answer);
       }
       setLoading(false);
@@ -431,9 +424,7 @@ function SettingsPanel() {
     };
   }, [supabase]);
 
-  const dirty =
-    settings !== null &&
-    (draftPrompt !== (settings.meli_agent_system_prompt ?? "") || draftAuto !== settings.meli_auto_answer);
+  const dirty = original !== null && draftAuto !== original;
 
   async function save() {
     if (!dirty || saving) return;
@@ -442,14 +433,11 @@ function SettingsPanel() {
       const res = await fetch("/api/meli/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          meli_agent_system_prompt: draftPrompt.trim() === "" ? null : draftPrompt,
-          meli_auto_answer: draftAuto,
-        }),
+        body: JSON.stringify({ meli_auto_answer: draftAuto }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
-      setSettings(json.settings ?? settings);
+      setOriginal(draftAuto);
       toast.success("Configuración guardada");
     } catch (e) {
       toast.error(`No se pudo guardar: ${(e as Error).message}`);
@@ -468,35 +456,23 @@ function SettingsPanel() {
 
   return (
     <div className="max-w-2xl space-y-6">
-      <section className="space-y-2">
-        <label className="text-sm font-medium">System prompt del agente MELI</label>
-        <p className="text-xs text-muted-foreground">
-          Si lo dejás vacío, las preguntas no van a recibir respuesta sugerida automática (siguen apareciendo en la
-          bandeja sin texto pre-cargado).
-        </p>
-        <Textarea
-          value={draftPrompt}
-          onChange={(e) => setDraftPrompt(e.target.value)}
-          rows={14}
-          placeholder="Sos un asistente que responde preguntas en Mercado Libre…"
-          className="font-mono text-sm"
-        />
-      </section>
-
-      <section className="space-y-2">
-        <label className="text-sm font-medium flex items-center gap-2">
+      <section className="space-y-3">
+        <label className="flex items-start gap-3 cursor-pointer">
           <input
             type="checkbox"
             checked={draftAuto}
             onChange={(e) => setDraftAuto(e.target.checked)}
-            className="size-4"
+            className="mt-1 size-4 accent-accent cursor-pointer"
           />
-          Auto-responder
+          <div className="flex-1">
+            <div className="text-[14px] font-medium text-ink">Auto-responder</div>
+            <p className="text-[12px] text-ink-soft mt-1 leading-relaxed">
+              Si está activado, el agente envía la respuesta directamente sin esperar aprobación humana. Las preguntas
+              aparecen directamente en la pestaña "Respondidas". Si está desactivado, cada pregunta queda en
+              "Pendientes" con una respuesta sugerida que tenés que aprobar.
+            </p>
+          </div>
         </label>
-        <p className="text-xs text-muted-foreground pl-6">
-          Si está activado, el agente envía la respuesta directamente sin esperar aprobación humana. Las preguntas
-          aparecen directamente en la pestaña "Respondidas".
-        </p>
       </section>
 
       <div className="flex justify-end">
