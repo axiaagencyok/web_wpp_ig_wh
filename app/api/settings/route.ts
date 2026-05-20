@@ -4,14 +4,35 @@ import { adminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
 
 const patchSchema = z.object({
-  admin_phone:              z.string().max(30).nullable().optional(),
-  admin_system_prompt:      z.string().max(4000).nullable().optional(),
-  agent_system_prompt:      z.string().max(4000).optional(),
-  ig_agent_system_prompt:   z.string().max(4000).nullable().optional(),
-  stories_context_general:  z.string().max(4000).nullable().optional(),
-  stories_context_keywords: z.string().max(4000).nullable().optional(),
-  ads_context_general:      z.string().max(4000).nullable().optional(),
-  ads_context_keywords:     z.string().max(4000).nullable().optional(),
+  // Identidad / admin / canales
+  admin_phone:                 z.string().max(30).nullable().optional(),
+  admin_system_prompt:         z.string().max(4000).nullable().optional(),
+
+  // Prompts crudos (tab Avanzado)
+  agent_system_prompt:         z.string().max(4000).optional(),
+  ig_agent_system_prompt:      z.string().max(4000).nullable().optional(),
+
+  // Contextos dinámicos
+  stories_context_general:     z.string().max(4000).nullable().optional(),
+  stories_context_keywords:    z.string().max(4000).nullable().optional(),
+  ads_context_general:         z.string().max(4000).nullable().optional(),
+  ads_context_keywords:        z.string().max(4000).nullable().optional(),
+
+  // Catálogo
+  google_sheet_id:             z.string().max(200).nullable().optional(),
+  google_sheet_range:          z.string().max(100).optional(),
+
+  // Leads / notificaciones
+  lead_notification_email:     z.string().email().max(200).nullable().optional(),
+
+  // Config estructurada del agente (migración 017)
+  agent_tone:                  z.enum(["cercano_casual", "profesional", "argentino_divertido", "neutro_formal"]).nullable().optional(),
+  agent_orthography:           z.array(z.enum(["voseo_argentino", "sin_emojis", "emojis_moderados"])).optional(),
+  agent_active_offer:          z.string().max(500).nullable().optional(),
+  agent_business_hours:        z.string().max(200).nullable().optional(),
+  agent_business_hours_alert:  z.boolean().optional(),
+  agent_temporary_closures:    z.string().max(500).nullable().optional(),
+  agent_special_instructions:  z.string().max(500).nullable().optional(),
 });
 
 export async function GET() {
@@ -31,7 +52,32 @@ export async function GET() {
 
     const { data: tenant, error: tenantErr } = await adminClient
       .from("tenants")
-      .select("id, name, whatsapp_number, admin_phone, admin_system_prompt, agent_system_prompt, ig_agent_system_prompt, stories_context_general, stories_context_keywords, ads_context_general, ads_context_keywords, google_sheet_id, google_sheet_range, agent_enabled")
+      .select(
+        [
+          "id",
+          "name",
+          "whatsapp_number",
+          "admin_phone",
+          "admin_system_prompt",
+          "agent_system_prompt",
+          "ig_agent_system_prompt",
+          "stories_context_general",
+          "stories_context_keywords",
+          "ads_context_general",
+          "ads_context_keywords",
+          "google_sheet_id",
+          "google_sheet_range",
+          "agent_enabled",
+          "lead_notification_email",
+          "agent_tone",
+          "agent_orthography",
+          "agent_active_offer",
+          "agent_business_hours",
+          "agent_business_hours_alert",
+          "agent_temporary_closures",
+          "agent_special_instructions",
+        ].join(", ")
+      )
       .eq("id", userRow.tenant_id)
       .single();
 
@@ -71,7 +117,7 @@ export async function PATCH(req: NextRequest) {
       .from("tenants")
       .update(parsed.data)
       .eq("id", userRow.tenant_id)
-      .select("id, admin_phone, admin_system_prompt, agent_system_prompt, ig_agent_system_prompt, stories_context_general, stories_context_keywords, ads_context_general, ads_context_keywords")
+      .select("id")
       .single();
 
     if (error) {
