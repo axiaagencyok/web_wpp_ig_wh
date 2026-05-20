@@ -4,21 +4,20 @@ import { createClient } from "@/lib/supabase/server";
 
 /**
  * PUT /api/meli/settings
- * Body: { meli_agent_system_prompt?: string|null, meli_auto_answer?: boolean }
+ * Body: { meli_auto_answer: boolean }
  *
- * Actualiza la configuración MELI del tenant del usuario logueado.
+ * Actualiza la configuración MELI del tenant del usuario logueado. Antes
+ * aceptaba `meli_agent_system_prompt`, pero esa columna quedó deprecated
+ * en migración 018 (el prompt se compone runtime via compose-prompt). El
+ * endpoint sólo persiste el toggle de auto-respuesta.
+ *
  * Se hace con el cliente autenticado (sesión del usuario) — la RLS valida
  * que solo pueda updatear su propio tenant.
  */
 
-const bodySchema = z
-  .object({
-    meli_agent_system_prompt: z.union([z.string(), z.null()]).optional(),
-    meli_auto_answer: z.boolean().optional(),
-  })
-  .refine((v) => v.meli_agent_system_prompt !== undefined || v.meli_auto_answer !== undefined, {
-    message: "at-least-one-field-required",
-  });
+const bodySchema = z.object({
+  meli_auto_answer: z.boolean(),
+});
 
 export async function PUT(req: NextRequest) {
   const supabase = await createClient();
@@ -42,22 +41,11 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "tenant-unresolved" }, { status: 403 });
   }
 
-  const updatePayload: {
-    meli_agent_system_prompt?: string | null;
-    meli_auto_answer?: boolean;
-  } = {};
-  if (parsed.meli_agent_system_prompt !== undefined) {
-    updatePayload.meli_agent_system_prompt = parsed.meli_agent_system_prompt;
-  }
-  if (parsed.meli_auto_answer !== undefined) {
-    updatePayload.meli_auto_answer = parsed.meli_auto_answer;
-  }
-
   const { data, error } = await supabase
     .from("tenants")
-    .update(updatePayload)
+    .update({ meli_auto_answer: parsed.meli_auto_answer })
     .eq("id", userRow.tenant_id)
-    .select("meli_agent_system_prompt, meli_auto_answer")
+    .select("meli_auto_answer")
     .maybeSingle();
 
   if (error) {
