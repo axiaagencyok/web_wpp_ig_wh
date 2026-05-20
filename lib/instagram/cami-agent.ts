@@ -3,6 +3,7 @@ import nodemailer from "nodemailer";
 import { after } from "next/server";
 import { adminClient } from "@/lib/supabase/admin";
 import { getCatalogText } from "@/lib/catalog/catalog-source";
+import { composeSystemPrompt } from "@/lib/agents/compose-prompt";
 import { scoreConversation } from "@/lib/leads/scoring-agent";
 import { upsertLead } from "@/lib/leads/upsert-lead";
 import { sendInstagramMessage, pauseInstagramBot, clearPostContextFlag } from "./manychat";
@@ -171,12 +172,6 @@ export async function processCamiConversation(conversationId: string): Promise<v
     throw new Error(`[cami] Tenant no encontrado: ${conversation.tenant_id}`);
   }
 
-  const basePrompt = tenant.ig_agent_system_prompt?.trim();
-  if (!basePrompt) {
-    throw new Error(
-      `Tenant ${conversation.tenant_id} no tiene ig_agent_system_prompt configurado en DB.`
-    );
-  }
   const tenantName = tenant.name?.trim();
   if (!tenantName) {
     throw new Error(`Tenant ${conversation.tenant_id} no tiene name configurado en DB.`);
@@ -245,10 +240,15 @@ export async function processCamiConversation(conversationId: string): Promise<v
       `================================================================`
     : "";
 
-  const fullSystemPrompt = basePrompt +
-    storyContextBlock +
-    adsContextBlock +
-    postContextBlock;
+  // System prompt vía compose-prompt: la plantilla base + la config
+  // estructurada del tenant + los bloques de contexto del turno actual.
+  // El catálogo no se preinyecta acá — Cami lo trae bajo demanda con la
+  // tool `get_catalogo`.
+  const fullSystemPrompt = composeSystemPrompt(tenant, "cami_ig", {
+    storiesContext: storyContextBlock || undefined,
+    adsContext: adsContextBlock || undefined,
+    postContext: postContextBlock || undefined,
+  });
 
   const anyContext = hasStoryContext || hasAdsContext || hasPostContext;
 
