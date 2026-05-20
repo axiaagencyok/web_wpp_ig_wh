@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Loader2,
   Save,
@@ -132,6 +132,13 @@ const TABS: ReadonlyArray<SettingsTab<TabKey>> = [
 export default function SettingsPage() {
   const [settings, setSettings] = useState<TenantSettings | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  // `dirty` se trackea como flag explícito en vez de comparar form vs settings
+  // con JSON.stringify. Cualquier llamada a `onChange` (definida abajo) lo
+  // levanta a true; los puntos donde resincronizamos form con la fuente de
+  // verdad del server (load inicial, post-save, refresh manual) lo bajan a
+  // false. Esto evita falsos negativos por ordering de claves o por re-renders
+  // que conservaban referencias.
+  const [dirty, setDirty] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<TabKey>("agent");
@@ -145,15 +152,11 @@ export default function SettingsPage() {
       .then((data) => {
         setSettings(data);
         setForm(tenantToForm(data));
+        setDirty(false);
       })
       .catch((err) => toast.error((err as Error).message))
       .finally(() => setLoading(false));
   }, []);
-
-  const dirty = useMemo(() => {
-    if (!settings) return false;
-    return JSON.stringify(tenantToForm(settings)) !== JSON.stringify(form);
-  }, [settings, form]);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -170,10 +173,10 @@ export default function SettingsPage() {
         throw new Error(d.error ?? "Error guardando");
       }
       toast.success("Configuración guardada");
-      // Refrescar settings para que `dirty` se reevalúe contra el nuevo baseline
       const refreshed = (await (await fetch("/api/settings")).json()) as TenantSettings;
       setSettings(refreshed);
       setForm(tenantToForm(refreshed));
+      setDirty(false);
     } catch (err) {
       toast.error((err as Error).message);
     } finally {
@@ -192,8 +195,10 @@ export default function SettingsPage() {
     );
   }
 
-  const onChange = <K extends keyof FormState>(key: K, value: FormState[K]) =>
+  const onChange = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+    setDirty(true);
+  };
 
   return (
     <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
@@ -225,6 +230,7 @@ export default function SettingsPage() {
                     const fresh = (await r.json()) as TenantSettings;
                     setSettings(fresh);
                     setForm(tenantToForm(fresh));
+                    setDirty(false);
                   }
                 }}
               />
