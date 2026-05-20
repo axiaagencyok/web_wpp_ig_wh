@@ -8,11 +8,11 @@ import type { Lead, Tenant } from "@/types/database.types";
  * - Silent skip si `tenant.lead_notification_email` es NULL/empty.
  * - Silent skip + warning si `RESEND_API_KEY` no está seteada (no queremos que
  *   un flow del agente falle por un mail; el lead ya está guardado en DB).
- * - From: env `RESEND_FROM` o `"Fenoma <leads@fenoma.agency>"`. Si el dominio
- *   `fenoma.agency` no está verificado en Resend, override con
- *   RESEND_FROM="Fenoma <onboarding@resend.dev>" mientras se verifica.
+ * - From: env `RESEND_FROM` o `"Fenoma Leads <leads@fenoma.agency>"`. Si el
+ *   dominio `fenoma.agency` no está verificado en Resend, override con
+ *   RESEND_FROM="Fenoma Leads <onboarding@resend.dev>" mientras se verifica.
  */
-const DEFAULT_FROM = "Fenoma <leads@fenoma.agency>";
+const DEFAULT_FROM = "Fenoma Leads <leads@fenoma.agency>";
 const SCORE_BAR = (score: number | null | undefined): string => {
   const s = typeof score === "number" ? Math.max(0, Math.min(100, score)) : 0;
   const filled = Math.round(s / 10);
