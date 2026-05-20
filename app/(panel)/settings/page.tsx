@@ -4,12 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Loader2,
   Save,
-  Bot,
   Sparkles,
   Phone,
   ShoppingBag,
   Mail,
-  AlertTriangle,
+  FileText,
+  Upload,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { ColumnHeader } from "@/components/panel/ColumnHeader";
@@ -20,6 +22,7 @@ import { cn } from "@/lib/utils";
 
 type AgentTone = "cercano_casual" | "profesional" | "argentino_divertido" | "neutro_formal";
 type OrthographyRule = "voseo_argentino" | "sin_emojis" | "emojis_moderados";
+type CatalogSource = "sheets" | "pdf";
 
 interface TenantSettings {
   id: string;
@@ -30,17 +33,16 @@ interface TenantSettings {
   admin_phone: string | null;
   admin_system_prompt: string | null;
 
-  // Prompts crudos
-  agent_system_prompt: string;
-  ig_agent_system_prompt: string | null;
-
   // Contextos
   stories_context_general: string | null;
   stories_context_keywords: string | null;
   ads_context_general: string | null;
   ads_context_keywords: string | null;
 
-  // Catálogo (sheets)
+  // Catálogo
+  catalog_source: CatalogSource;
+  catalog_pdf_path: string | null;
+  catalog_text_cached_at: string | null;
   google_sheet_id: string | null;
   google_sheet_range: string;
 
@@ -70,6 +72,7 @@ interface FormState {
   agent_special_instructions: string;
 
   // Catálogo
+  catalog_source: CatalogSource;
   google_sheet_id: string;
   google_sheet_range: string;
 
@@ -85,10 +88,6 @@ interface FormState {
   // Integraciones
   admin_phone: string;
   admin_system_prompt: string;
-
-  // Avanzado
-  agent_system_prompt: string;
-  ig_agent_system_prompt: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -99,6 +98,7 @@ const EMPTY_FORM: FormState = {
   agent_business_hours_alert: false,
   agent_temporary_closures: "",
   agent_special_instructions: "",
+  catalog_source: "sheets",
   google_sheet_id: "",
   google_sheet_range: "",
   stories_context_general: "",
@@ -108,8 +108,6 @@ const EMPTY_FORM: FormState = {
   lead_notification_email: "",
   admin_phone: "",
   admin_system_prompt: "",
-  agent_system_prompt: "",
-  ig_agent_system_prompt: "",
 };
 
 // ─── Tabs config ──────────────────────────────────────────────────────────────
@@ -119,8 +117,7 @@ type TabKey =
   | "catalog"
   | "contexts"
   | "notifications"
-  | "integrations"
-  | "advanced";
+  | "integrations";
 
 const TABS: ReadonlyArray<SettingsTab<TabKey>> = [
   { key: "agent",         label: "Configuración del agente" },
@@ -128,7 +125,6 @@ const TABS: ReadonlyArray<SettingsTab<TabKey>> = [
   { key: "contexts",      label: "Contextos" },
   { key: "notifications", label: "Notificaciones" },
   { key: "integrations",  label: "Integraciones" },
-  { key: "advanced",      label: "Avanzado" },
 ];
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -218,7 +214,21 @@ export default function SettingsPage() {
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
             {tab === "agent" && <AgentTab form={form} onChange={onChange} />}
-            {tab === "catalog" && <CatalogTab form={form} onChange={onChange} />}
+            {tab === "catalog" && (
+              <CatalogTab
+                form={form}
+                onChange={onChange}
+                tenant={settings}
+                onTenantRefresh={async () => {
+                  const r = await fetch("/api/settings");
+                  if (r.ok) {
+                    const fresh = (await r.json()) as TenantSettings;
+                    setSettings(fresh);
+                    setForm(tenantToForm(fresh));
+                  }
+                }}
+              />
+            )}
             {tab === "contexts" && <ContextsTab form={form} onChange={onChange} />}
             {tab === "notifications" && (
               <NotificationsTab form={form} onChange={onChange} />
@@ -229,9 +239,6 @@ export default function SettingsPage() {
                 onChange={onChange}
                 tenant={settings}
               />
-            )}
-            {tab === "advanced" && (
-              <AdvancedTab form={form} onChange={onChange} />
             )}
           </div>
         </div>
@@ -364,52 +371,324 @@ function AgentTab({
 function CatalogTab({
   form,
   onChange,
+  tenant,
+  onTenantRefresh,
 }: {
   form: FormState;
   onChange: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
+  tenant: TenantSettings | null;
+  onTenantRefresh: () => Promise<void>;
 }) {
   return (
     <>
       <SectionHeader
-        title="Google Sheets"
-        body="Si tu catálogo vive en una hoja de Sheets, configurá el ID y el rango. El agente lo lee en cada conversación con un cache corto."
+        title="Fuente del catálogo"
+        body="El asistente lee el catálogo para responder consultas. Cuando lo actualices, los próximos mensajes ya usan la versión nueva."
       />
 
       <Card>
-        <Field label="Google Sheet ID" hint="El ID que aparece en la URL del Sheet.">
-          <Input
-            value={form.google_sheet_id}
-            onChange={(v) => onChange("google_sheet_id", v)}
-            placeholder="1c7DpWjA7mi18Ii1oyqNnYqKALhOQDnRF1k7Bcfucm0Y"
-            mono
-          />
-        </Field>
-
-        <Field
-          label="Rango"
-          hint='Hoja y celdas a leer. Ej. "Lista de Precios" o "Productos!A1:G500".'
-        >
-          <Input
-            value={form.google_sheet_range}
-            onChange={(v) => onChange("google_sheet_range", v)}
-            placeholder="Lista de Precios"
+        <Field label="Tipo de fuente">
+          <RadioGroup
+            value={form.catalog_source}
+            onChange={(v) => onChange("catalog_source", v as CatalogSource)}
+            options={[
+              {
+                value: "sheets",
+                label: "Google Sheets",
+                hint: "Tu catálogo en una hoja de cálculo. Se actualiza en vivo cada vez que editás el sheet.",
+              },
+              {
+                value: "pdf",
+                label: "Archivo PDF",
+                hint: "Subís un PDF con tu catálogo. Lo cambiás cuando quieras desde acá.",
+              },
+            ]}
           />
         </Field>
       </Card>
 
-      <SectionHeader
-        title="Catálogo PDF"
-        body="Si preferís un PDF como fuente, el setup se hace desde el equipo de Fenoma — pedinos que subamos el archivo al bucket. Una vez cargado, el agente lo lee automáticamente."
-      />
-
-      <Card>
-        <p className="text-[13px] text-ink-soft leading-relaxed">
-          La fuente del catálogo (Sheets vs PDF) se configura desde el backend.
-          Si querés cambiar a PDF, contactanos.
-        </p>
-      </Card>
+      {form.catalog_source === "sheets" ? (
+        <SheetsConfig form={form} onChange={onChange} />
+      ) : (
+        <PdfConfig tenant={tenant} onUploaded={onTenantRefresh} />
+      )}
     </>
   );
+}
+
+function SheetsConfig({
+  form,
+  onChange,
+}: {
+  form: FormState;
+  onChange: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
+}) {
+  const [validating, setValidating] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  async function validate() {
+    if (validating) return;
+    if (!form.google_sheet_id.trim() || !form.google_sheet_range.trim()) {
+      setResult({ ok: false, message: "Cargá el Sheet ID y el rango antes de validar." });
+      return;
+    }
+    setValidating(true);
+    setResult(null);
+    try {
+      const res = await fetch("/api/settings/catalog-validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          google_sheet_id: form.google_sheet_id,
+          google_sheet_range: form.google_sheet_range,
+        }),
+      });
+      const json = (await res.json()) as { ok: boolean; empty?: boolean; error?: string };
+      if (json.ok) {
+        setResult({
+          ok: true,
+          message: json.empty
+            ? "Conexión OK — pero el rango no devolvió filas. Revisá que el Sheet tenga headers + al menos una fila."
+            : "Conexión OK. El asistente puede leer este catálogo.",
+        });
+      } else {
+        setResult({ ok: false, message: json.error ?? "Error desconocido" });
+      }
+    } catch (e) {
+      setResult({ ok: false, message: (e as Error).message });
+    } finally {
+      setValidating(false);
+    }
+  }
+
+  return (
+    <Card>
+      <Field label="Google Sheet ID" hint="El ID que aparece en la URL del Sheet entre /d/ y /edit.">
+        <Input
+          value={form.google_sheet_id}
+          onChange={(v) => {
+            onChange("google_sheet_id", v);
+            setResult(null);
+          }}
+          placeholder="1c7DpWjA7mi18Ii1oyqNnYqKALhOQDnRF1k7Bcfucm0Y"
+          mono
+        />
+      </Field>
+
+      <Field
+        label="Rango"
+        hint='Hoja y celdas a leer. Ej. "Lista de Precios" o "Productos!A1:G500".'
+      >
+        <Input
+          value={form.google_sheet_range}
+          onChange={(v) => {
+            onChange("google_sheet_range", v);
+            setResult(null);
+          }}
+          placeholder="Lista de Precios"
+        />
+      </Field>
+
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={validate}
+          disabled={validating}
+          className="
+            inline-flex items-center gap-2 rounded-full border border-line bg-cream
+            px-4 py-1.5 text-[13px] font-medium text-ink hover:bg-cream-soft
+            transition-colors disabled:opacity-40 disabled:cursor-not-allowed
+          "
+        >
+          {validating ? <Loader2 size={13} className="animate-spin" /> : null}
+          Validar conexión
+        </button>
+        {result && (
+          <span
+            className={cn(
+              "inline-flex items-center gap-1.5 text-[12px]",
+              result.ok ? "text-emerald-700" : "text-destructive"
+            )}
+          >
+            {result.ok ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
+            {result.message}
+          </span>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function PdfConfig({
+  tenant,
+  onUploaded,
+}: {
+  tenant: TenantSettings | null;
+  onUploaded: () => Promise<void>;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const currentPath = tenant?.catalog_pdf_path ?? null;
+  const cachedAt = tenant?.catalog_text_cached_at ?? null;
+  const filename = currentPath ? currentPath.split("/").pop() : null;
+
+  async function handleFile(file: File) {
+    if (uploading) return;
+    setError(null);
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/settings/catalog-pdf", { method: "POST", body: fd });
+      const json = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; detail?: string };
+      if (!res.ok || !json.ok) {
+        throw new Error(json.detail ?? json.error ?? `HTTP ${res.status}`);
+      }
+      await onUploaded();
+      toast.success("Catálogo actualizado");
+    } catch (e) {
+      setError((e as Error).message);
+      toast.error((e as Error).message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <Card>
+      {currentPath ? (
+        <Field label="Archivo cargado">
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-cream px-4 py-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <FileText size={18} strokeWidth={1.6} className="text-accent flex-shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[13px] font-medium text-ink truncate">{filename}</div>
+                <div className="text-[11px] text-stone mt-0.5">
+                  {cachedAt ? `Procesado ${relativeTime(cachedAt)}` : "Aún no se procesó"}
+                </div>
+              </div>
+            </div>
+            <PdfPicker uploading={uploading} onFile={handleFile} label="Reemplazar" />
+          </div>
+        </Field>
+      ) : (
+        <Field label="Subir PDF" hint="Máx. 5 MB. Solo archivos .pdf.">
+          <PdfPicker uploading={uploading} onFile={handleFile} label="Subir archivo" big />
+        </Field>
+      )}
+
+      {error && (
+        <p className="text-[12px] text-destructive flex items-center gap-1.5">
+          <AlertCircle size={13} />
+          {error}
+        </p>
+      )}
+
+      <p className="text-[11px] text-stone leading-relaxed">
+        Cuando subas un PDF nuevo, el asistente lo procesa al primer mensaje que reciba después. La transcripción
+        queda cacheada hasta que vuelvas a reemplazar el archivo.
+      </p>
+    </Card>
+  );
+}
+
+function PdfPicker({
+  uploading,
+  onFile,
+  label,
+  big = false,
+}: {
+  uploading: boolean;
+  onFile: (f: File) => void;
+  label: string;
+  big?: boolean;
+}) {
+  return (
+    <label
+      className={cn(
+        "inline-flex items-center gap-2 rounded-full bg-ink text-cream font-medium cursor-pointer hover:bg-accent transition-colors",
+        big ? "px-5 py-2.5 text-[13px]" : "px-3 py-1.5 text-[12px]",
+        uploading && "opacity-60 cursor-not-allowed"
+      )}
+    >
+      {uploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={big ? 14 : 12} strokeWidth={1.8} />}
+      {uploading ? "Subiendo…" : label}
+      <input
+        type="file"
+        accept="application/pdf,.pdf"
+        disabled={uploading}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            onFile(file);
+            // Reset the input so picking the same file again re-fires
+            e.target.value = "";
+          }
+        }}
+        className="hidden"
+      />
+    </label>
+  );
+}
+
+function RadioGroup<T extends string>({
+  value,
+  onChange,
+  options,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  options: ReadonlyArray<{ value: T; label: string; hint?: string }>;
+}) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {options.map((o) => {
+        const isActive = o.value === value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(o.value)}
+            className={cn(
+              "text-left rounded-xl border px-4 py-3 transition-colors",
+              isActive
+                ? "border-accent bg-accent-soft"
+                : "border-line bg-cream hover:bg-cream-soft"
+            )}
+          >
+            <div className="flex items-center gap-2">
+              <span
+                className={cn(
+                  "size-3.5 rounded-full border-2 flex-shrink-0",
+                  isActive ? "border-accent bg-accent" : "border-line"
+                )}
+                aria-hidden="true"
+              />
+              <span className="text-[13px] font-medium text-ink">{o.label}</span>
+            </div>
+            {o.hint && (
+              <p className="text-[11px] text-ink-soft leading-relaxed mt-1.5 pl-5">{o.hint}</p>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Compact "hace X" — same lógica que /meli usa.
+function relativeTime(iso: string): string {
+  const now = Date.now();
+  const t = new Date(iso).getTime();
+  const diffMs = now - t;
+  if (diffMs < 60_000) return "hace unos segundos";
+  const mins = Math.floor(diffMs / 60_000);
+  if (mins < 60) return `hace ${mins} min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `hace ${hours} h`;
+  const days = Math.floor(hours / 24);
+  return `hace ${days} d`;
 }
 
 // ─── Tab: Contextos ───────────────────────────────────────────────────────────
@@ -599,70 +878,6 @@ function IntegrationsTab({
           Si necesitás cambiar la cuenta IG vinculada o ajustar el flow de ManyChat,
           contactanos.
         </p>
-      </Card>
-    </>
-  );
-}
-
-// ─── Tab: Avanzado ────────────────────────────────────────────────────────────
-
-function AdvancedTab({
-  form,
-  onChange,
-}: {
-  form: FormState;
-  onChange: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
-}) {
-  return (
-    <>
-      <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 flex items-start gap-3">
-        <AlertTriangle
-          size={16}
-          strokeWidth={1.8}
-          className="text-amber-600 mt-0.5 flex-shrink-0"
-        />
-        <div className="space-y-1">
-          <p className="text-[13px] font-medium text-ink">Modo avanzado</p>
-          <p className="text-[12px] text-ink-soft leading-relaxed">
-            Editar los prompts crudos override la configuración estructurada de la pestaña
-            <em> Configuración del agente</em>. Usalo solo si necesitás un comportamiento
-            que no entre en los campos estándar.
-          </p>
-        </div>
-      </div>
-
-      <SectionHeader
-        title="Mati — agente WhatsApp"
-        body="Prompt completo del agente para conversaciones por WhatsApp. Quedó como histórico — el runtime ya no lee este campo (ver compose-prompt)."
-      />
-
-      <Card>
-        <Field label="System prompt" icon={<Bot size={13} strokeWidth={1.8} />}>
-          <Textarea
-            value={form.agent_system_prompt}
-            onChange={(v) => onChange("agent_system_prompt", v)}
-            rows={14}
-            placeholder="Sos Mati, el asistente virtual de…"
-            mono
-          />
-        </Field>
-      </Card>
-
-      <SectionHeader
-        title="Cami / Matías — agente Instagram"
-        body="Prompt completo del agente para conversaciones por Instagram."
-      />
-
-      <Card>
-        <Field label="System prompt" icon={<Bot size={13} strokeWidth={1.8} />}>
-          <Textarea
-            value={form.ig_agent_system_prompt}
-            onChange={(v) => onChange("ig_agent_system_prompt", v)}
-            rows={14}
-            placeholder="Sos Cami, asistente virtual de…"
-            mono
-          />
-        </Field>
       </Card>
     </>
   );
@@ -917,6 +1132,7 @@ function tenantToForm(t: TenantSettings): FormState {
     agent_business_hours_alert: t.agent_business_hours_alert ?? false,
     agent_temporary_closures: t.agent_temporary_closures ?? "",
     agent_special_instructions: t.agent_special_instructions ?? "",
+    catalog_source: t.catalog_source ?? "sheets",
     google_sheet_id: t.google_sheet_id ?? "",
     google_sheet_range: t.google_sheet_range ?? "",
     stories_context_general: t.stories_context_general ?? "",
@@ -926,8 +1142,6 @@ function tenantToForm(t: TenantSettings): FormState {
     lead_notification_email: t.lead_notification_email ?? "",
     admin_phone: t.admin_phone ?? "",
     admin_system_prompt: t.admin_system_prompt ?? "",
-    agent_system_prompt: t.agent_system_prompt ?? "",
-    ig_agent_system_prompt: t.ig_agent_system_prompt ?? "",
   };
 }
 
@@ -945,6 +1159,7 @@ function formToPatch(f: FormState) {
     agent_special_instructions: orEmpty(f.agent_special_instructions),
 
     // Catálogo
+    catalog_source: f.catalog_source,
     google_sheet_id: orEmpty(f.google_sheet_id),
     google_sheet_range: f.google_sheet_range.trim() === "" ? undefined : f.google_sheet_range,
 
@@ -960,10 +1175,6 @@ function formToPatch(f: FormState) {
     // Integraciones
     admin_phone: orEmpty(f.admin_phone),
     admin_system_prompt: orEmpty(f.admin_system_prompt),
-
-    // Avanzado
-    agent_system_prompt: f.agent_system_prompt.trim() === "" ? undefined : f.agent_system_prompt,
-    ig_agent_system_prompt: orEmpty(f.ig_agent_system_prompt),
   };
 }
 
