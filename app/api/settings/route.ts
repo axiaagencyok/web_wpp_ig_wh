@@ -33,6 +33,10 @@ const patchSchema = z.object({
   agent_business_hours_alert:  z.boolean().optional(),
   agent_temporary_closures:    z.string().max(500).nullable().optional(),
   agent_special_instructions:  z.string().max(500).nullable().optional(),
+
+  // Channel feature flags (migración 019)
+  instagram_enabled:           z.boolean().optional(),
+  whatsapp_enabled:            z.boolean().optional(),
 });
 
 export async function GET() {
