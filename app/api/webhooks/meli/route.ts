@@ -21,7 +21,7 @@ import type { MeliAccount } from "@/types/database.types";
  *   3. (opcional) GET /items/{id}?attributes=... → thumbnail y precio del ítem.
  *   4. INSERT en meli_questions (ON CONFLICT DO NOTHING vía UNIQUE
  *      meli_question_id — idempotente si MELI reintenta).
- *   5. Si el tenant tiene `meli_agent_system_prompt`: generar respuesta AI,
+ *   5. Si `tenant.meli_enabled = true`: generar respuesta AI vía compose-prompt,
  *      guardar `ai_suggested_answer`. Si `meli_auto_answer = true`, además
  *      enviar la respuesta y marcar status='answered'.
  *
@@ -182,8 +182,8 @@ async function processQuestionWebhook(meliUserId: number, meliQuestionId: number
       console.error(`[meli/webhook] tenant ${account.tenant_id} no encontrado para q ${meliQuestionId}`);
       return;
     }
-    if (!tenant.meli_agent_system_prompt?.trim()) {
-      console.log(`[meli/webhook] tenant ${tenant.id} sin meli_agent_system_prompt; q ${meliQuestionId} queda pending para revisión humana`);
+    if (!tenant.meli_enabled) {
+      console.log(`[meli/webhook] tenant ${tenant.id} con meli_enabled=false; q ${meliQuestionId} queda pending para revisión humana`);
       return;
     }
 
