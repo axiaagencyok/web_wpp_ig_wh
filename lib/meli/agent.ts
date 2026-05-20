@@ -1,19 +1,21 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getCatalogText } from "@/lib/catalog/catalog-source";
+import { composeSystemPrompt } from "@/lib/agents/compose-prompt";
 import { getMeliRequest } from "./client";
 import type { MeliAccount, MeliQuestion, Tenant } from "@/types/database.types";
 
 /**
- * Agente MELI: dada una pregunta sobre un item, genera la respuesta sugerida.
+ * Agente MELI (Matías): dada una pregunta sobre una publicación, genera la
+ * respuesta sugerida.
  *
- * - Si `tenant.meli_agent_system_prompt` está vacío → return null (opt-in).
- * - Trae el catálogo del tenant via `getCatalogText` (mismo path que usa
- *   Cami/Matías en Instagram — sheets o PDF, depende de cómo esté configurado).
- * - Trae el item específico de MELI vía `GET /items/{item_id}` para tener
- *   título, precio y atributos al alcance del modelo.
- * - Llama a Claude Sonnet 4 con system = prompt del tenant + catálogo + datos
- *   del item, y el texto del comprador como user message.
- * - Devuelve la respuesta truncada a 2000 chars (límite del API de MELI).
+ * - Gate: `tenant.meli_enabled` debe ser true. Si false → return null.
+ *   (Antes el gate era "tenant.meli_agent_system_prompt no-vacío". El system
+ *   prompt ahora se compone con lib/agents/compose-prompt.ts; el flag
+ *   booleano es el único toggle.)
+ * - Trae el catálogo del tenant via `getCatalogText`.
+ * - Trae el item específico vía `GET /items/{id}` para datos puntuales.
+ * - Llama a Claude con system prompt compuesto + catálogo + item block.
+ * - Devuelve la respuesta truncada a 2000 chars (límite del API MELI).
  */
 
 const MAX_ANSWER_CHARS = 2000;
@@ -37,8 +39,7 @@ export async function generateAnswer(
   account: MeliAccount,
   tenant: Tenant
 ): Promise<string | null> {
-  const sys = tenant.meli_agent_system_prompt?.trim();
-  if (!sys) return null;
+  if (!tenant.meli_enabled) return null;
 
   // Catálogo del tenant (sheets o pdf — abstraído por catalog-source).
   let catalogText = "";
@@ -73,15 +74,16 @@ export async function generateAnswer(
     itemBlock = `ID: ${question.item_id}${question.item_title ? `\nTítulo: ${question.item_title}` : ""}`;
   }
 
-  const systemPrompt =
-    `${sys}\n\n` +
+  const meliItemBlock =
     `─────────────────────────────────────────\n` +
     `PUBLICACIÓN A LA QUE PREGUNTA EL CLIENTE\n` +
     `─────────────────────────────────────────\n` +
-    `${itemBlock}\n\n` +
-    (catalogText
-      ? `─────────────────────────────────────────\nCATÁLOGO COMPLETO DEL NEGOCIO\n─────────────────────────────────────────\n${catalogText}\n`
-      : "");
+    `${itemBlock}`;
+
+  const systemPrompt = composeSystemPrompt(tenant, "matias_meli", {
+    catalog: catalogText || undefined,
+    meliItem: meliItemBlock,
+  });
 
   const model = process.env.MELI_AGENT_MODEL?.trim() || DEFAULT_MODEL;
 
