@@ -34,6 +34,9 @@ export type Database = {
           catalog_text_cached_at: string | null
           lead_notification_email: string | null
           lead_scoring_prompt: string | null
+          meli_agent_system_prompt: string | null
+          meli_auto_answer: boolean
+          meli_enabled: boolean
           created_at: string
         }
         Insert: {
@@ -60,6 +63,9 @@ export type Database = {
           catalog_text_cached_at?: string | null
           lead_notification_email?: string | null
           lead_scoring_prompt?: string | null
+          meli_agent_system_prompt?: string | null
+          meli_auto_answer?: boolean
+          meli_enabled?: boolean
           created_at?: string
         }
         Update: {
@@ -86,6 +92,9 @@ export type Database = {
           catalog_text_cached_at?: string | null
           lead_notification_email?: string | null
           lead_scoring_prompt?: string | null
+          meli_agent_system_prompt?: string | null
+          meli_auto_answer?: boolean
+          meli_enabled?: boolean
           created_at?: string
         }
         Relationships: []
@@ -425,6 +434,140 @@ export type Database = {
           }
         ]
       }
+      meli_accounts: {
+        Row: {
+          id: string
+          tenant_id: string
+          meli_user_id: number
+          meli_nickname: string | null
+          access_token: string
+          refresh_token: string
+          expires_at: string
+          scope: string | null
+          status: 'connected' | 'needs_reauth'
+          connected_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          meli_user_id: number
+          meli_nickname?: string | null
+          access_token: string
+          refresh_token: string
+          expires_at: string
+          scope?: string | null
+          status?: 'connected' | 'needs_reauth'
+          connected_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          meli_user_id?: number
+          meli_nickname?: string | null
+          access_token?: string
+          refresh_token?: string
+          expires_at?: string
+          scope?: string | null
+          status?: 'connected' | 'needs_reauth'
+          connected_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meli_accounts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      meli_questions: {
+        Row: {
+          id: number
+          tenant_id: string
+          meli_account_id: string | null
+          meli_question_id: number
+          item_id: string
+          item_title: string | null
+          item_price: number | null
+          item_thumbnail: string | null
+          text: string
+          from_user_id: number | null
+          from_user_nickname: string | null
+          status: 'pending' | 'answered' | 'deleted'
+          ai_suggested_answer: string | null
+          sent_answer: string | null
+          answered_at: string | null
+          sent_by: 'ai' | 'human' | null
+          date_created: string
+          received_at: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          tenant_id: string
+          meli_account_id?: string | null
+          meli_question_id: number
+          item_id: string
+          item_title?: string | null
+          item_price?: number | null
+          item_thumbnail?: string | null
+          text: string
+          from_user_id?: number | null
+          from_user_nickname?: string | null
+          status?: 'pending' | 'answered' | 'deleted'
+          ai_suggested_answer?: string | null
+          sent_answer?: string | null
+          answered_at?: string | null
+          sent_by?: 'ai' | 'human' | null
+          date_created: string
+          received_at?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          tenant_id?: string
+          meli_account_id?: string | null
+          meli_question_id?: number
+          item_id?: string
+          item_title?: string | null
+          item_price?: number | null
+          item_thumbnail?: string | null
+          text?: string
+          from_user_id?: number | null
+          from_user_nickname?: string | null
+          status?: 'pending' | 'answered' | 'deleted'
+          ai_suggested_answer?: string | null
+          sent_answer?: string | null
+          answered_at?: string | null
+          sent_by?: 'ai' | 'human' | null
+          date_created?: string
+          received_at?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meli_questions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meli_questions_meli_account_id_fkey"
+            columns: ["meli_account_id"]
+            isOneToOne: false
+            referencedRelation: "meli_accounts"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -452,3 +595,7 @@ export type MessageBuffer = Database['public']['Tables']['message_buffer']['Row'
 export type AiLog = Database['public']['Tables']['ai_logs']['Row']
 export type Lead = Database['public']['Tables']['Leads']['Row']
 export type LeadInsert = Database['public']['Tables']['Leads']['Insert']
+export type MeliAccount = Database['public']['Tables']['meli_accounts']['Row']
+export type MeliAccountInsert = Database['public']['Tables']['meli_accounts']['Insert']
+export type MeliQuestion = Database['public']['Tables']['meli_questions']['Row']
+export type MeliQuestionInsert = Database['public']['Tables']['meli_questions']['Insert']
