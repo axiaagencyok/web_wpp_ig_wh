@@ -15,7 +15,7 @@ import type { Tenant } from "@/types/database.types";
  * - El modelo se setea por env `LEAD_SCORING_MODEL` o cae a un default.
  */
 
-const DEFAULT_MODEL = "claude-sonnet-4-20250514";
+const DEFAULT_MODEL = "claude-sonnet-4-5";
 
 export interface ScoringResult {
   nombre: string | null;
