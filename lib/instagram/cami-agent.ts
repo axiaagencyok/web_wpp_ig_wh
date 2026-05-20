@@ -6,7 +6,7 @@ import { getCatalogText } from "@/lib/catalog/catalog-source";
 import { composeSystemPrompt } from "@/lib/agents/compose-prompt";
 import { scoreConversation } from "@/lib/leads/scoring-agent";
 import { upsertLead } from "@/lib/leads/upsert-lead";
-import { sendInstagramMessage, pauseInstagramBot, clearPostContextFlag } from "./manychat";
+import { sendInstagramMessage, pauseInstagramBot, clearPostContextFlag, ManyChatError } from "./manychat";
 
 const MODEL = "claude-sonnet-4-5";
 const FALLBACK_MODEL = "claude-haiku-4-5-20251001";
@@ -388,15 +388,42 @@ export async function processCamiConversation(conversationId: string): Promise<v
     return;
   }
 
-  // Supervisor derivation detection
+  // Supervisor derivation detection.
+  //
+  // Orden de operaciones: primero intentamos pausar el bot en ManyChat. Solo
+  // si el pause es "real" (o falla con un error grave que sugiere problema de
+  // infraestructura) marcamos la conversación como derivada y notificamos al
+  // supervisor. ManyChat devuelve 404 ocasionalmente para subscribers cuyo
+  // perfil quedó desincronizado del endpoint /instagram/subscriber/* — en ese
+  // caso preferimos seguir el flow normal de Cami antes que dejar al cliente
+  // sin respuesta.
   if (finalText.includes("Te derivaré con un supervisor.")) {
-    await adminClient
-      .from("conversations")
-      .update({ automation_paused: true, paused_reason: "derived_to_human" })
-      .eq("id", conversationId);
+    let shouldDerive = true;
+    try {
+      await pauseInstagramBot(subscriberId);
+    } catch (err) {
+      if (err instanceof ManyChatError && !err.isTransient) {
+        // 404 (y otros 4xx no-críticos): seguimos el flow normal. El cliente
+        // recibe la respuesta de Cami; no marcamos paused/derived.
+        console.warn(
+          `[cami] pauseBot ${err.status} — skipping derivation, continuing normal flow for subscriber ${subscriberId}`
+        );
+        shouldDerive = false;
+      } else {
+        // 5xx / 401 / 408 / 429 / red: lo tratamos como problema grave y
+        // derivamos igual (la pausa no quedó aplicada en ManyChat pero el
+        // supervisor puede tomar el chat manualmente).
+        console.error("[cami] pauseBot transient/grave error — deriving anyway:", err);
+      }
+    }
 
-    await sendSupervisorEmail(nombre, igUsername);
-    await pauseInstagramBot(subscriberId);
+    if (shouldDerive) {
+      await adminClient
+        .from("conversations")
+        .update({ automation_paused: true, paused_reason: "derived_to_human" })
+        .eq("id", conversationId);
+      await sendSupervisorEmail(nombre, igUsername);
+    }
   }
 
   // Save outbound message to DB

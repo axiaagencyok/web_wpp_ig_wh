@@ -19,8 +19,14 @@ const patchSchema = z.object({
   google_sheet_id:             z.string().max(200).nullable().optional(),
   google_sheet_range:          z.string().max(100).optional(),
 
-  // Leads / notificaciones
-  lead_notification_email:     z.string().email().max(200).nullable().optional(),
+  // Leads / notificaciones.
+  // Email validation must not block saves on OTHER fields when the column
+  // already holds a legacy/malformed value. Empty strings collapse to null;
+  // otherwise we accept any string ≤200 chars. Front-end already enforces
+  // email format on edit (`type="email"`), so this is a server-side guard
+  // against historic dirty rows blocking unrelated edits.
+  lead_notification_email:     z.string().max(200).nullable().optional()
+                                   .transform((v) => (typeof v === "string" && v.trim() === "" ? null : v)),
 
   // Config estructurada del agente (migración 017)
   agent_tone:                  z.enum(["cercano_casual", "profesional", "argentino_divertido", "neutro_formal"]).nullable().optional(),
@@ -106,7 +112,17 @@ export async function PATCH(req: NextRequest) {
 
     const parsed = patchSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json({ error: "Datos inválidos", detail: parsed.error.flatten() }, { status: 400 });
+      const flat = parsed.error.flatten();
+      // Loguear con detalle para que regresiones del front no se queden
+      // mudas en producción.
+      console.error("[PATCH /api/settings] validation failed:", JSON.stringify(flat));
+      // Resumen humano del primer field problemático, si existe, para que
+      // el toast del front no diga solo "Datos inválidos".
+      const firstField = Object.entries(flat.fieldErrors)[0];
+      const summary = firstField
+        ? `Datos inválidos en "${firstField[0]}": ${firstField[1]?.[0] ?? "valor no aceptado"}`
+        : "Datos inválidos";
+      return NextResponse.json({ error: summary, detail: flat }, { status: 400 });
     }
 
     const { data: userRow, error: userErr } = await supabase
