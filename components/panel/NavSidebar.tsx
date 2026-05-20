@@ -54,14 +54,16 @@ function NavItem({
 
   const content = (
     <>
+      {/* Indicador anclado a la altura del ICONO (no del container), para que
+         labels que envuelven a 2 líneas no desplacen visualmente la barra. */}
       {isActive && (
         <span
           aria-hidden="true"
-          className="absolute left-1 top-1/2 -translate-y-1/2 w-[3px] h-7 rounded-full bg-accent"
+          className="absolute left-1 top-2 w-[3px] h-7 rounded-full bg-accent"
         />
       )}
       <Icon size={20} strokeWidth={isActive ? 2 : 1.6} className="flex-shrink-0" />
-      <span className="leading-none">{label}</span>
+      <span className="leading-tight text-center">{label}</span>
     </>
   );
 

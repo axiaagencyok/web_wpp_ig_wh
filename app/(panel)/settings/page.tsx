@@ -1,58 +1,144 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Loader2, Phone, Bot, Save, Settings, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Loader2,
+  Save,
+  Bot,
+  Sparkles,
+  Phone,
+  ShoppingBag,
+  Mail,
+  AlertTriangle,
+} from "lucide-react";
 import { toast } from "sonner";
 import { ColumnHeader } from "@/components/panel/ColumnHeader";
+import { SettingsTabs, type SettingsTab } from "@/components/panel/SettingsTabs";
+import { cn } from "@/lib/utils";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type AgentTone = "cercano_casual" | "profesional" | "argentino_divertido" | "neutro_formal";
+type OrthographyRule = "voseo_argentino" | "sin_emojis" | "emojis_moderados";
 
 interface TenantSettings {
   id: string;
   name: string;
   whatsapp_number: string;
+
+  // Identidad / admin
   admin_phone: string | null;
   admin_system_prompt: string | null;
+
+  // Prompts crudos
   agent_system_prompt: string;
   ig_agent_system_prompt: string | null;
+
+  // Contextos
   stories_context_general: string | null;
   stories_context_keywords: string | null;
   ads_context_general: string | null;
   ads_context_keywords: string | null;
+
+  // Catálogo (sheets)
   google_sheet_id: string | null;
   google_sheet_range: string;
+
+  // Notificaciones
+  lead_notification_email: string | null;
+
+  // Config estructurada del agente (migración 017)
+  agent_tone: AgentTone | null;
+  agent_orthography: OrthographyRule[];
+  agent_active_offer: string | null;
+  agent_business_hours: string | null;
+  agent_business_hours_alert: boolean;
+  agent_temporary_closures: string | null;
+  agent_special_instructions: string | null;
+
   agent_enabled: boolean;
 }
 
-// Inline IG logo SVG
-function IgIcon({ size = 14 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
-    </svg>
-  );
+interface FormState {
+  // Agent
+  agent_tone: AgentTone | "";
+  agent_orthography: OrthographyRule[];
+  agent_active_offer: string;
+  agent_business_hours: string;
+  agent_business_hours_alert: boolean;
+  agent_temporary_closures: string;
+  agent_special_instructions: string;
+
+  // Catálogo
+  google_sheet_id: string;
+  google_sheet_range: string;
+
+  // Contextos
+  stories_context_general: string;
+  stories_context_keywords: string;
+  ads_context_general: string;
+  ads_context_keywords: string;
+
+  // Notificaciones
+  lead_notification_email: string;
+
+  // Integraciones
+  admin_phone: string;
+  admin_system_prompt: string;
+
+  // Avanzado
+  agent_system_prompt: string;
+  ig_agent_system_prompt: string;
 }
 
-// Inline WA logo SVG
-function WaIcon({ size = 14 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-    </svg>
-  );
-}
+const EMPTY_FORM: FormState = {
+  agent_tone: "",
+  agent_orthography: [],
+  agent_active_offer: "",
+  agent_business_hours: "",
+  agent_business_hours_alert: false,
+  agent_temporary_closures: "",
+  agent_special_instructions: "",
+  google_sheet_id: "",
+  google_sheet_range: "",
+  stories_context_general: "",
+  stories_context_keywords: "",
+  ads_context_general: "",
+  ads_context_keywords: "",
+  lead_notification_email: "",
+  admin_phone: "",
+  admin_system_prompt: "",
+  agent_system_prompt: "",
+  ig_agent_system_prompt: "",
+};
+
+// ─── Tabs config ──────────────────────────────────────────────────────────────
+
+type TabKey =
+  | "agent"
+  | "catalog"
+  | "contexts"
+  | "notifications"
+  | "integrations"
+  | "advanced";
+
+const TABS: ReadonlyArray<SettingsTab<TabKey>> = [
+  { key: "agent",         label: "Configuración del agente" },
+  { key: "catalog",       label: "Catálogo y productos" },
+  { key: "contexts",      label: "Contextos" },
+  { key: "notifications", label: "Notificaciones" },
+  { key: "integrations",  label: "Integraciones" },
+  { key: "advanced",      label: "Avanzado" },
+];
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<TenantSettings | null>(null);
-  const [loading, setLoading]   = useState(true);
-  const [saving, setSaving]     = useState(false);
-
-  const [adminPhone, setAdminPhone]                 = useState("");
-  const [adminPrompt, setAdminPrompt]               = useState("");
-  const [agentPrompt, setAgentPrompt]               = useState("");
-  const [igAgentPrompt, setIgAgentPrompt]           = useState("");
-  const [storiesGeneral, setStoriesGeneral]         = useState("");
-  const [storiesKeywords, setStoriesKeywords]       = useState("");
-  const [adsGeneral, setAdsGeneral]                 = useState("");
-  const [adsKeywords, setAdsKeywords]               = useState("");
+  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState<TabKey>("agent");
 
   useEffect(() => {
     fetch("/api/settings")
@@ -62,42 +148,36 @@ export default function SettingsPage() {
       })
       .then((data) => {
         setSettings(data);
-        setAdminPhone(data.admin_phone ?? "");
-        setAdminPrompt(data.admin_system_prompt ?? "");
-        setAgentPrompt(data.agent_system_prompt ?? "");
-        setIgAgentPrompt(data.ig_agent_system_prompt ?? "");
-        setStoriesGeneral(data.stories_context_general ?? "");
-        setStoriesKeywords(data.stories_context_keywords ?? "");
-        setAdsGeneral(data.ads_context_general ?? "");
-        setAdsKeywords(data.ads_context_keywords ?? "");
+        setForm(tenantToForm(data));
       })
       .catch((err) => toast.error((err as Error).message))
       .finally(() => setLoading(false));
   }, []);
 
+  const dirty = useMemo(() => {
+    if (!settings) return false;
+    return JSON.stringify(tenantToForm(settings)) !== JSON.stringify(form);
+  }, [settings, form]);
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    if (!dirty || saving) return;
     setSaving(true);
     try {
       const res = await fetch("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          admin_phone:              adminPhone || null,
-          admin_system_prompt:      adminPrompt || null,
-          agent_system_prompt:      agentPrompt || undefined,
-          ig_agent_system_prompt:   igAgentPrompt || null,
-          stories_context_general:  storiesGeneral || null,
-          stories_context_keywords: storiesKeywords || null,
-          ads_context_general:      adsGeneral || null,
-          ads_context_keywords:     adsKeywords || null,
-        }),
+        body: JSON.stringify(formToPatch(form)),
       });
       if (!res.ok) {
-        const d = await res.json() as { error?: string };
+        const d = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(d.error ?? "Error guardando");
       }
       toast.success("Configuración guardada");
+      // Refrescar settings para que `dirty` se reevalúe contra el nuevo baseline
+      const refreshed = (await (await fetch("/api/settings")).json()) as TenantSettings;
+      setSettings(refreshed);
+      setForm(tenantToForm(refreshed));
     } catch (err) {
       toast.error((err as Error).message);
     } finally {
@@ -110,263 +190,780 @@ export default function SettingsPage() {
       <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
         <ColumnHeader />
         <div className="flex-1 flex items-center justify-center">
-          <Loader2 size={20} className="animate-spin text-muted-foreground" />
+          <Loader2 size={20} className="animate-spin text-stone" />
         </div>
       </div>
     );
   }
 
+  const onChange = <K extends keyof FormState>(key: K, value: FormState[K]) =>
+    setForm((prev) => ({ ...prev, [key]: value }));
+
   return (
     <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
       <ColumnHeader />
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-2xl mx-auto px-6 py-10 space-y-8">
-        {/* Page header */}
-        <div>
+
+      <header className="px-6 pt-8 pb-5 bg-cream-raised border-b border-line">
+        <div className="max-w-3xl mx-auto">
           <h1 className="font-display text-[28px] text-ink leading-tight">Configuración</h1>
           {settings?.name && (
             <p className="text-[13px] text-stone mt-1">{settings.name}</p>
           )}
         </div>
+      </header>
 
-        <form onSubmit={handleSave} className="space-y-6">
-          {/* ── Tenant info (readonly) ── */}
-          <section className="bg-card border border-border rounded-2xl p-5 space-y-4">
-            <h2 className="text-[14px] font-medium text-ink">Información del negocio</h2>
+      <SettingsTabs tabs={TABS} active={tab} onChange={setTab} />
 
-            <Field label="Número principal" icon={<Phone size={13} />}>
-              <input
-                type="text"
-                value={settings?.whatsapp_number ?? ""}
-                readOnly
-                className={readonlyCls}
+      <form onSubmit={handleSave} className="flex-1 min-h-0 flex flex-col">
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+            {tab === "agent" && <AgentTab form={form} onChange={onChange} />}
+            {tab === "catalog" && <CatalogTab form={form} onChange={onChange} />}
+            {tab === "contexts" && <ContextsTab form={form} onChange={onChange} />}
+            {tab === "notifications" && (
+              <NotificationsTab form={form} onChange={onChange} />
+            )}
+            {tab === "integrations" && (
+              <IntegrationsTab
+                form={form}
+                onChange={onChange}
+                tenant={settings}
               />
-            </Field>
-          </section>
-
-          {/* ── Lucas — WPP agent ── */}
-          <section className="bg-card border border-border rounded-2xl p-5 space-y-4">
-            <div className="flex items-start gap-2">
-              <div className="w-7 h-7 rounded-lg bg-[#25D366]/15 flex items-center justify-center flex-shrink-0 mt-0.5 text-[#25D366]">
-                <WaIcon size={14} />
-              </div>
-              <div>
-                <h2 className="text-[14px] font-medium text-ink">Lucas — agente WhatsApp</h2>
-                <p className="text-[12px] text-stone mt-0.5 leading-relaxed">
-                  Personalización adicional para Lucas. El prompt base ya está configurado — acá podés agregar instrucciones específicas de tu negocio: nombre de la empresa, horarios, restricciones, etc.
-                </p>
-              </div>
-            </div>
-
-            <Field label="Personalización de Lucas" icon={<Bot size={13} />}>
-              <textarea
-                value={agentPrompt}
-                onChange={(e) => setAgentPrompt(e.target.value)}
-                placeholder={`Ejemplo: "La empresa se llama ${settings?.name ?? "tu negocio"}. Atendemos de lunes a sábado de 9 a 18hs. No hacemos envíos internacionales. Si el cliente pregunta por garantía, mencionar que es oficial de 12 meses."`}
-                rows={6}
-                className={`${inputCls} resize-none leading-relaxed`}
-              />
-              <p className="text-[10px] text-stone px-1">
-                Estas instrucciones se agregan al final del prompt base de Lucas. No reemplaza la lógica principal.
-              </p>
-            </Field>
-          </section>
-
-          {/* ── Cami — IG agent ── */}
-          <section className="bg-card border border-border rounded-2xl p-5 space-y-4">
-            <div className="flex items-start gap-2">
-              <div className="w-7 h-7 rounded-lg bg-[#E1306C]/15 flex items-center justify-center flex-shrink-0 mt-0.5 text-[#E1306C]">
-                <IgIcon size={14} />
-              </div>
-              <div>
-                <h2 className="text-[14px] font-medium text-ink">Cami — agente Instagram</h2>
-                <p className="text-[12px] text-stone mt-0.5 leading-relaxed">
-                  Personalización adicional para Cami. Igual que Lucas, el prompt base ya está configurado — acá agregás lo específico de tu negocio para Instagram.
-                </p>
-              </div>
-            </div>
-
-            <Field label="Personalización de Cami" icon={<Bot size={13} />}>
-              <textarea
-                value={igAgentPrompt}
-                onChange={(e) => setIgAgentPrompt(e.target.value)}
-                placeholder={`Ejemplo: "La empresa se llama ${settings?.name ?? "tu negocio"}. Los seguidores de Instagram suelen preguntar por combos y promociones especiales. Si mencionan un reel o historia, responder con entusiasmo."`}
-                rows={6}
-                className={`${inputCls} resize-none leading-relaxed`}
-              />
-              <p className="text-[10px] text-stone px-1">
-                Estas instrucciones se agregan al final del prompt base de Cami. No reemplaza la lógica principal.
-              </p>
-            </Field>
-          </section>
-
-          {/* ── Contexto de Stories ── */}
-          <section className="bg-card border border-border rounded-2xl p-5 space-y-4">
-            <div className="flex items-start gap-2">
-              <div className="w-7 h-7 rounded-lg bg-[#E1306C]/15 flex items-center justify-center flex-shrink-0 mt-0.5 text-[#E1306C]">
-                <Sparkles size={14} strokeWidth={1.8} />
-              </div>
-              <div>
-                <h2 className="text-[14px] font-medium text-ink">Contexto de Stories</h2>
-                <p className="text-[12px] text-stone mt-0.5 leading-relaxed">
-                  Pistas para Cami cuando un seguidor responde una story. <strong>NO incluyas precios ni stock</strong> — esos siempre se traen del catálogo. El contexto solo le dice a Cami qué producto o tema buscar.
-                </p>
-              </div>
-            </div>
-
-            <Field label="Contexto general" icon={<Sparkles size={13} strokeWidth={1.8} />}>
-              <textarea
-                value={storiesGeneral}
-                onChange={(e) => setStoriesGeneral(e.target.value)}
-                placeholder="Hoy publicamos vasos de vidrio"
-                rows={3}
-                className={`${inputCls} resize-none leading-relaxed`}
-              />
-              <p className="text-[10px] text-stone px-1">
-                Describí qué producto o tema publicaste en stories hoy. NO pongas precios ni stock — eso se trae solo desde el catálogo. Ejemplo: &ldquo;Hoy publicamos vasos de vidrio&rdquo;
-              </p>
-            </Field>
-
-            <Field label="Palabras clave" icon={<Sparkles size={13} strokeWidth={1.8} />}>
-              <textarea
-                value={storiesKeywords}
-                onChange={(e) => setStoriesKeywords(e.target.value)}
-                placeholder="VASOS: vasos de vidrio. JARROS: jarros de cerámica"
-                rows={4}
-                className={`${inputCls} resize-none leading-relaxed`}
-              />
-              <p className="text-[10px] text-stone px-1">
-                Si publicás varios productos en el día, listá las palabras clave y qué producto representa cada una. Recordá pedir en la story que los seguidores respondan con la palabra clave (ej: &ldquo;Respondé VASOS para info&rdquo;). Ejemplo: &ldquo;VASOS: vasos de vidrio. JARROS: jarros de cerámica&rdquo;
-              </p>
-            </Field>
-          </section>
-
-          {/* ── Contexto de Ads ── */}
-          <section className="bg-card border border-border rounded-2xl p-5 space-y-4">
-            <div className="flex items-start gap-2">
-              <div className="w-7 h-7 rounded-lg bg-[#E1306C]/15 flex items-center justify-center flex-shrink-0 mt-0.5 text-[#E1306C]">
-                <Sparkles size={14} strokeWidth={1.8} />
-              </div>
-              <div>
-                <h2 className="text-[14px] font-medium text-ink">Contexto de Ads</h2>
-                <p className="text-[12px] text-stone mt-0.5 leading-relaxed">
-                  Pistas para Cami cuando un seguidor clickea un anuncio de Instagram. <strong>NO incluyas precios ni stock</strong> — esos siempre se traen del catálogo. El contexto solo le dice a Cami qué producto o tema buscar.
-                </p>
-              </div>
-            </div>
-
-            <Field label="Contexto general" icon={<Sparkles size={13} strokeWidth={1.8} />}>
-              <textarea
-                value={adsGeneral}
-                onChange={(e) => setAdsGeneral(e.target.value)}
-                placeholder="Estamos promocionando air fryers"
-                rows={3}
-                className={`${inputCls} resize-none leading-relaxed`}
-              />
-              <p className="text-[10px] text-stone px-1">
-                Describí qué se está promocionando en el ad actual. NO pongas precios ni stock — eso se trae solo desde el catálogo. Ejemplo: &ldquo;Estamos promocionando air fryers&rdquo;
-              </p>
-            </Field>
-
-            <Field label="Palabras clave" icon={<Sparkles size={13} strokeWidth={1.8} />}>
-              <textarea
-                value={adsKeywords}
-                onChange={(e) => setAdsKeywords(e.target.value)}
-                placeholder="AIR: air fryer Liliana. TV: televisor Samsung"
-                rows={4}
-                className={`${inputCls} resize-none leading-relaxed`}
-              />
-              <p className="text-[10px] text-stone px-1">
-                Si la campaña tiene varios productos, listá palabras clave y a qué producto representan. Ejemplo: &ldquo;AIR: air fryer Liliana. TV: televisor Samsung&rdquo;
-              </p>
-            </Field>
-          </section>
-
-          {/* ── Juan — admin WhatsApp ── */}
-          <section className="bg-card border border-border rounded-2xl p-5 space-y-4">
-            <div className="flex items-start gap-2">
-              <div className="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <Bot size={14} className="text-accent" />
-              </div>
-              <div>
-                <h2 className="text-[14px] font-medium text-ink">Juan — admin via WhatsApp</h2>
-                <p className="text-[12px] text-stone mt-0.5 leading-relaxed">
-                  El gerente puede enviar mensajes desde este número para obtener reportes y gestionar el catálogo.
-                </p>
-              </div>
-            </div>
-
-            <Field label="Número del admin" icon={<Phone size={13} />}>
-              <input
-                type="text"
-                value={adminPhone}
-                onChange={(e) => setAdminPhone(e.target.value)}
-                placeholder="whatsapp:+54911..."
-                className={inputCls}
-              />
-              <p className="text-[10px] text-stone px-1">
-                Formato: <code className="font-mono">whatsapp:+549...</code>
-              </p>
-            </Field>
-
-            <Field label="Personalización del agente admin" icon={<Bot size={13} />}>
-              <textarea
-                value={adminPrompt}
-                onChange={(e) => setAdminPrompt(e.target.value)}
-                placeholder={`Sos el asistente operativo de ${settings?.name ?? "tu negocio"}. El gerente te escribe por WhatsApp para pedirte reportes, modificar el catálogo, o consultar info del negocio. Sos preciso, conciso, profesional.`}
-                rows={6}
-                className={`${inputCls} resize-none leading-relaxed`}
-              />
-            </Field>
-          </section>
-
-          {/* Save */}
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              disabled={saving}
-              className="
-                flex items-center gap-2 rounded-full bg-ink text-cream
-                px-5 py-2.5 text-[13px] font-medium
-                hover:bg-accent transition-colors duration-150
-                disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-ink
-                cursor-pointer
-              "
-            >
-              {saving
-                ? <><Loader2 size={15} className="animate-spin" />Guardando…</>
-                : <><Save size={15} strokeWidth={1.8} />Guardar cambios</>
-              }
-            </button>
+            )}
+            {tab === "advanced" && (
+              <AdvancedTab form={form} onChange={onChange} />
+            )}
           </div>
-        </form>
         </div>
+
+        <SaveBar dirty={dirty} saving={saving} />
+      </form>
+    </div>
+  );
+}
+
+// ─── Tab: Configuración del agente ───────────────────────────────────────────
+
+function AgentTab({
+  form,
+  onChange,
+}: {
+  form: FormState;
+  onChange: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
+}) {
+  return (
+    <>
+      <SectionHeader
+        title="Personalidad y reglas"
+        body="Cómo te gusta que responda tu agente. Estos campos definen el tono, las normas de estilo, y la información de tu negocio que el agente menciona cuando hace falta."
+      />
+
+      <Card>
+        <Field label="Tono de habla">
+          <Select
+            value={form.agent_tone}
+            onChange={(v) => onChange("agent_tone", v as AgentTone | "")}
+            options={[
+              { value: "", label: "Sin definir" },
+              { value: "cercano_casual", label: "Cercano y casual" },
+              { value: "profesional", label: "Profesional" },
+              { value: "argentino_divertido", label: "Argentino divertido" },
+              { value: "neutro_formal", label: "Neutro formal" },
+            ]}
+          />
+        </Field>
+
+        <Field label="Reglas de ortografía y estilo" hint="Marcá las que apliquen.">
+          <CheckboxGroup
+            value={form.agent_orthography}
+            onChange={(v) => onChange("agent_orthography", v as OrthographyRule[])}
+            options={[
+              { value: "voseo_argentino", label: "Usar voseo argentino (vos / tenés / querés)" },
+              { value: "emojis_moderados", label: "Permitir emojis moderados" },
+              { value: "sin_emojis", label: "Sin emojis" },
+            ]}
+          />
+        </Field>
+      </Card>
+
+      <SectionHeader
+        title="Promociones y horarios"
+        body="Información que el agente puede usar en sus respuestas. Cuando no aplique, dejá el campo vacío."
+      />
+
+      <Card>
+        <Field
+          label="Oferta vigente"
+          hint='Una sola promoción activa. Ej. "20% OFF en SPC Click hasta el viernes".'
+        >
+          <Input
+            value={form.agent_active_offer}
+            onChange={(v) => onChange("agent_active_offer", v)}
+            placeholder='Ej. "20% OFF en SPC Click hasta el viernes"'
+          />
+        </Field>
+
+        <Field label="Horario de atención">
+          <Input
+            value={form.agent_business_hours}
+            onChange={(v) => onChange("agent_business_hours", v)}
+            placeholder="Lun a vie de 9 a 18hs, sáb 9 a 13hs"
+          />
+        </Field>
+
+        <Field>
+          <Checkbox
+            checked={form.agent_business_hours_alert}
+            onChange={(c) => onChange("agent_business_hours_alert", c)}
+            label="Avisar al cliente cuando se contesta fuera de horario"
+          />
+        </Field>
+
+        <Field
+          label="Cierres temporales"
+          hint='Solo si vas a estar cerrado un período específico. Ej. "Cerrado del 24/12 al 02/01".'
+        >
+          <Input
+            value={form.agent_temporary_closures}
+            onChange={(v) => onChange("agent_temporary_closures", v)}
+            placeholder='Ej. "Cerrado del 24/12 al 02/01"'
+          />
+        </Field>
+      </Card>
+
+      <SectionHeader
+        title="Instrucciones libres"
+        body="Cualquier cosa que no entre en los campos de arriba. Pensá en restricciones específicas o casos de uso particulares."
+      />
+
+      <Card>
+        <Field
+          label="Instrucciones especiales"
+          hint={`${form.agent_special_instructions.length} / 500 caracteres`}
+        >
+          <Textarea
+            value={form.agent_special_instructions}
+            onChange={(v) => onChange("agent_special_instructions", v.slice(0, 500))}
+            rows={5}
+            placeholder='Ej. "No prometer plazos de entrega menores a 7 días hábiles. Si el cliente pregunta por accesorios para Air Fryer, sugerir la canasta extra que viene en combo."'
+          />
+        </Field>
+      </Card>
+
+      <FutureNotice>
+        Estos campos ya quedan guardados, pero todavía no se aplican automáticamente al
+        agente — sigue usando los prompts crudos. En la próxima actualización el agente
+        va a leer esta configuración estructurada en vez de los prompts.
+      </FutureNotice>
+    </>
+  );
+}
+
+// ─── Tab: Catálogo y productos ────────────────────────────────────────────────
+
+function CatalogTab({
+  form,
+  onChange,
+}: {
+  form: FormState;
+  onChange: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
+}) {
+  return (
+    <>
+      <SectionHeader
+        title="Google Sheets"
+        body="Si tu catálogo vive en una hoja de Sheets, configurá el ID y el rango. El agente lo lee en cada conversación con un cache corto."
+      />
+
+      <Card>
+        <Field label="Google Sheet ID" hint="El ID que aparece en la URL del Sheet.">
+          <Input
+            value={form.google_sheet_id}
+            onChange={(v) => onChange("google_sheet_id", v)}
+            placeholder="1c7DpWjA7mi18Ii1oyqNnYqKALhOQDnRF1k7Bcfucm0Y"
+            mono
+          />
+        </Field>
+
+        <Field
+          label="Rango"
+          hint='Hoja y celdas a leer. Ej. "Lista de Precios" o "Productos!A1:G500".'
+        >
+          <Input
+            value={form.google_sheet_range}
+            onChange={(v) => onChange("google_sheet_range", v)}
+            placeholder="Lista de Precios"
+          />
+        </Field>
+      </Card>
+
+      <SectionHeader
+        title="Catálogo PDF"
+        body="Si preferís un PDF como fuente, el setup se hace desde el equipo de Fenoma — pedinos que subamos el archivo al bucket. Una vez cargado, el agente lo lee automáticamente."
+      />
+
+      <Card>
+        <p className="text-[13px] text-ink-soft leading-relaxed">
+          La fuente del catálogo (Sheets vs PDF) se configura desde el backend.
+          Si querés cambiar a PDF, contactanos.
+        </p>
+      </Card>
+    </>
+  );
+}
+
+// ─── Tab: Contextos ───────────────────────────────────────────────────────────
+
+function ContextsTab({
+  form,
+  onChange,
+}: {
+  form: FormState;
+  onChange: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
+}) {
+  return (
+    <>
+      <SectionHeader
+        title="Stories"
+        body="Cuando un seguidor responde una story, el agente usa este contexto para saber a qué producto se refiere. NO incluyas precios ni stock — eso siempre se trae del catálogo."
+      />
+
+      <Card>
+        <Field
+          label="Contexto general"
+          hint='Qué producto o tema publicaste hoy. Ej. "Hoy publicamos vasos de vidrio".'
+        >
+          <Textarea
+            value={form.stories_context_general}
+            onChange={(v) => onChange("stories_context_general", v)}
+            rows={3}
+            placeholder="Hoy publicamos vasos de vidrio"
+          />
+        </Field>
+
+        <Field
+          label="Palabras clave"
+          hint='Si publicaste varios productos, listalos con su keyword. Ej. "VASOS: vasos de vidrio. JARROS: jarros de cerámica".'
+        >
+          <Textarea
+            value={form.stories_context_keywords}
+            onChange={(v) => onChange("stories_context_keywords", v)}
+            rows={4}
+            placeholder="VASOS: vasos de vidrio. JARROS: jarros de cerámica"
+          />
+        </Field>
+      </Card>
+
+      <SectionHeader
+        title="Anuncios"
+        body="Cuando alguien clickea un ad y escribe, el agente usa este contexto. Misma lógica que stories — sin precios ni stock."
+      />
+
+      <Card>
+        <Field
+          label="Contexto general"
+          hint='Qué se está promocionando. Ej. "Estamos promocionando air fryers".'
+        >
+          <Textarea
+            value={form.ads_context_general}
+            onChange={(v) => onChange("ads_context_general", v)}
+            rows={3}
+            placeholder="Estamos promocionando air fryers"
+          />
+        </Field>
+
+        <Field
+          label="Palabras clave"
+          hint='Si la campaña tiene varios productos. Ej. "AIR: air fryer Liliana. TV: televisor Samsung".'
+        >
+          <Textarea
+            value={form.ads_context_keywords}
+            onChange={(v) => onChange("ads_context_keywords", v)}
+            rows={4}
+            placeholder="AIR: air fryer Liliana. TV: televisor Samsung"
+          />
+        </Field>
+      </Card>
+    </>
+  );
+}
+
+// ─── Tab: Notificaciones ──────────────────────────────────────────────────────
+
+function NotificationsTab({
+  form,
+  onChange,
+}: {
+  form: FormState;
+  onChange: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
+}) {
+  return (
+    <>
+      <SectionHeader
+        title="Mail de notificación"
+        body="Cuando un lead supera el score de 60 puntos, te llega un mail con los datos extraídos por el agente."
+      />
+
+      <Card>
+        <Field label="Email destino" icon={<Mail size={13} strokeWidth={1.8} />}>
+          <Input
+            type="email"
+            value={form.lead_notification_email}
+            onChange={(v) => onChange("lead_notification_email", v)}
+            placeholder="vos@tuempresa.com"
+          />
+          <p className="text-[11px] text-stone leading-relaxed">
+            Si lo dejás vacío no se envían notificaciones — los leads igual se guardan
+            en la base.
+          </p>
+        </Field>
+      </Card>
+    </>
+  );
+}
+
+// ─── Tab: Integraciones ───────────────────────────────────────────────────────
+
+function IntegrationsTab({
+  form,
+  onChange,
+  tenant,
+}: {
+  form: FormState;
+  onChange: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
+  tenant: TenantSettings | null;
+}) {
+  return (
+    <>
+      <SectionHeader
+        title="WhatsApp"
+        body="Número principal y configuración del canal admin."
+      />
+
+      <Card>
+        <Field label="Número principal">
+          <Input value={tenant?.whatsapp_number ?? ""} readOnly mono />
+        </Field>
+
+        <Field
+          label="Número del admin"
+          hint='Formato: "whatsapp:+549..."'
+          icon={<Phone size={13} strokeWidth={1.8} />}
+        >
+          <Input
+            value={form.admin_phone}
+            onChange={(v) => onChange("admin_phone", v)}
+            placeholder="whatsapp:+549..."
+            mono
+          />
+        </Field>
+
+        <Field
+          label="Prompt del agente admin"
+          hint="Qué rol cumple el agente cuando recibe mensajes del admin."
+        >
+          <Textarea
+            value={form.admin_system_prompt}
+            onChange={(v) => onChange("admin_system_prompt", v)}
+            rows={5}
+            placeholder="Sos el asistente operativo de tu negocio. El admin te escribe por WhatsApp para pedirte reportes, modificar el catálogo o consultar info."
+          />
+        </Field>
+      </Card>
+
+      <SectionHeader
+        title="Mercado Libre"
+        body="La configuración de MELI se edita desde su panel propio."
+      />
+
+      <Card>
+        <a
+          href="/meli"
+          className="
+            inline-flex items-center gap-2 text-[13px] font-medium text-accent
+            hover:underline underline-offset-2
+          "
+        >
+          <ShoppingBag size={14} strokeWidth={1.8} />
+          Ir al panel de Mercado Libre →
+        </a>
+      </Card>
+
+      <SectionHeader
+        title="Instagram"
+        body="El canal IG se conecta vía ManyChat — no requiere config desde acá."
+      />
+
+      <Card>
+        <p className="text-[13px] text-ink-soft leading-relaxed">
+          Si necesitás cambiar la cuenta IG vinculada o ajustar el flow de ManyChat,
+          contactanos.
+        </p>
+      </Card>
+    </>
+  );
+}
+
+// ─── Tab: Avanzado ────────────────────────────────────────────────────────────
+
+function AdvancedTab({
+  form,
+  onChange,
+}: {
+  form: FormState;
+  onChange: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
+}) {
+  return (
+    <>
+      <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 flex items-start gap-3">
+        <AlertTriangle
+          size={16}
+          strokeWidth={1.8}
+          className="text-amber-600 mt-0.5 flex-shrink-0"
+        />
+        <div className="space-y-1">
+          <p className="text-[13px] font-medium text-ink">Modo avanzado</p>
+          <p className="text-[12px] text-ink-soft leading-relaxed">
+            Editar los prompts crudos override la configuración estructurada de la pestaña
+            <em> Configuración del agente</em>. Usalo solo si necesitás un comportamiento
+            que no entre en los campos estándar.
+          </p>
+        </div>
+      </div>
+
+      <SectionHeader
+        title="Lucas — agente WhatsApp"
+        body="Prompt completo del agente para conversaciones por WhatsApp."
+      />
+
+      <Card>
+        <Field label="System prompt" icon={<Bot size={13} strokeWidth={1.8} />}>
+          <Textarea
+            value={form.agent_system_prompt}
+            onChange={(v) => onChange("agent_system_prompt", v)}
+            rows={14}
+            placeholder="Sos Lucas, el asistente virtual de…"
+            mono
+          />
+        </Field>
+      </Card>
+
+      <SectionHeader
+        title="Cami / Matías — agente Instagram"
+        body="Prompt completo del agente para conversaciones por Instagram."
+      />
+
+      <Card>
+        <Field label="System prompt" icon={<Bot size={13} strokeWidth={1.8} />}>
+          <Textarea
+            value={form.ig_agent_system_prompt}
+            onChange={(v) => onChange("ig_agent_system_prompt", v)}
+            rows={14}
+            placeholder="Sos Cami, asistente virtual de…"
+            mono
+          />
+        </Field>
+      </Card>
+    </>
+  );
+}
+
+// ─── Save bar (sticky bottom) ─────────────────────────────────────────────────
+
+function SaveBar({ dirty, saving }: { dirty: boolean; saving: boolean }) {
+  return (
+    <div className="border-t border-line bg-cream-raised px-6 py-3">
+      <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
+        <p className="text-[12px] text-stone">
+          {saving
+            ? "Guardando…"
+            : dirty
+              ? "Tenés cambios sin guardar"
+              : "Todos los cambios guardados"}
+        </p>
+        <button
+          type="submit"
+          disabled={!dirty || saving}
+          className="
+            inline-flex items-center gap-2 rounded-full bg-ink text-cream
+            px-5 py-2 text-[13px] font-medium
+            hover:bg-accent transition-colors duration-150
+            disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-ink
+          "
+        >
+          {saving ? (
+            <>
+              <Loader2 size={14} className="animate-spin" />
+              Guardando…
+            </>
+          ) : (
+            <>
+              <Save size={14} strokeWidth={1.8} />
+              Guardar cambios
+            </>
+          )}
+        </button>
       </div>
     </div>
   );
 }
 
-const inputCls = `
-  w-full rounded-xl bg-cream border border-line px-3 py-2
-  text-sm text-ink placeholder:text-stone
-  outline-none focus:border-accent focus:bg-cream-soft
-  transition-colors duration-150
-`;
+// ─── Reusable form atoms ──────────────────────────────────────────────────────
 
-const readonlyCls = `
-  w-full rounded-xl bg-cream-soft border border-line px-3 py-2
-  text-sm text-stone font-mono
-  outline-none cursor-default select-all
-`;
-
-function Field({ label, icon, children }: { label: string; icon: React.ReactNode; children: React.ReactNode }) {
+function SectionHeader({ title, body }: { title: string; body: string }) {
   return (
-    <div className="space-y-1.5">
-      <label className="flex items-center gap-1.5 text-[10px] font-bold text-stone uppercase tracking-[0.14em]">
-        {icon}
-        {label}
-      </label>
+    <div className="pt-2">
+      <h2 className="font-display text-[18px] text-ink leading-tight">{title}</h2>
+      <p className="text-[13px] text-ink-soft mt-1 leading-relaxed max-w-prose">{body}</p>
+    </div>
+  );
+}
+
+function Card({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-line bg-cream-raised p-5 space-y-5 shadow-card">
       {children}
     </div>
   );
 }
+
+function Field({
+  label,
+  icon,
+  hint,
+  children,
+}: {
+  label?: string;
+  icon?: React.ReactNode;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      {label && (
+        <label className="flex items-center gap-1.5 text-[11px] font-medium text-ink uppercase tracking-wider">
+          {icon}
+          {label}
+        </label>
+      )}
+      {children}
+      {hint && <p className="text-[11px] text-stone leading-relaxed">{hint}</p>}
+    </div>
+  );
+}
+
+const inputBase = "w-full rounded-xl bg-cream border border-line px-3.5 py-2.5 text-[14px] text-ink placeholder:text-stone outline-none focus:border-accent focus:bg-cream-soft transition-colors";
+
+function Input({
+  value,
+  onChange,
+  placeholder,
+  readOnly = false,
+  mono = false,
+  type = "text",
+}: {
+  value: string;
+  onChange?: (v: string) => void;
+  placeholder?: string;
+  readOnly?: boolean;
+  mono?: boolean;
+  type?: "text" | "email";
+}) {
+  return (
+    <input
+      type={type}
+      value={value}
+      onChange={(e) => onChange?.(e.target.value)}
+      placeholder={placeholder}
+      readOnly={readOnly}
+      className={cn(
+        inputBase,
+        mono && "font-mono text-[13px]",
+        readOnly && "bg-cream-soft text-stone cursor-default select-all"
+      )}
+    />
+  );
+}
+
+function Textarea({
+  value,
+  onChange,
+  rows = 4,
+  placeholder,
+  mono = false,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  rows?: number;
+  placeholder?: string;
+  mono?: boolean;
+}) {
+  return (
+    <textarea
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      rows={rows}
+      placeholder={placeholder}
+      className={cn(
+        inputBase,
+        "resize-none leading-relaxed",
+        mono && "font-mono text-[12.5px] leading-[1.55]"
+      )}
+    />
+  );
+}
+
+function Select({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: ReadonlyArray<{ value: string; label: string }>;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={cn(inputBase, "appearance-none pr-9 bg-cream")}
+      style={{
+        backgroundImage:
+          "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%236E6878' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
+        backgroundRepeat: "no-repeat",
+        backgroundPosition: "right 14px center",
+      }}
+    >
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function Checkbox({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (c: boolean) => void;
+  label: string;
+}) {
+  return (
+    <label className="flex items-start gap-2.5 cursor-pointer select-none group">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="
+          mt-0.5 size-4 rounded border-line accent-accent cursor-pointer
+          focus:ring-1 focus:ring-accent focus:ring-offset-1
+        "
+      />
+      <span className="text-[13px] text-ink leading-snug group-hover:text-accent transition-colors">
+        {label}
+      </span>
+    </label>
+  );
+}
+
+function CheckboxGroup<T extends string>({
+  value,
+  onChange,
+  options,
+}: {
+  value: T[];
+  onChange: (v: T[]) => void;
+  options: ReadonlyArray<{ value: T; label: string }>;
+}) {
+  function toggle(v: T) {
+    if (value.includes(v)) onChange(value.filter((x) => x !== v));
+    else onChange([...value, v]);
+  }
+  return (
+    <div className="space-y-2">
+      {options.map((o) => (
+        <Checkbox
+          key={o.value}
+          checked={value.includes(o.value)}
+          onChange={() => toggle(o.value)}
+          label={o.label}
+        />
+      ))}
+    </div>
+  );
+}
+
+function FutureNotice({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-line bg-cream-soft px-4 py-3 flex items-start gap-3">
+      <Sparkles size={15} strokeWidth={1.8} className="text-accent mt-0.5 flex-shrink-0" />
+      <p className="text-[12px] text-ink-soft leading-relaxed">{children}</p>
+    </div>
+  );
+}
+
+// ─── State <-> server payload ─────────────────────────────────────────────────
+
+function tenantToForm(t: TenantSettings): FormState {
+  return {
+    agent_tone: t.agent_tone ?? "",
+    agent_orthography: t.agent_orthography ?? [],
+    agent_active_offer: t.agent_active_offer ?? "",
+    agent_business_hours: t.agent_business_hours ?? "",
+    agent_business_hours_alert: t.agent_business_hours_alert ?? false,
+    agent_temporary_closures: t.agent_temporary_closures ?? "",
+    agent_special_instructions: t.agent_special_instructions ?? "",
+    google_sheet_id: t.google_sheet_id ?? "",
+    google_sheet_range: t.google_sheet_range ?? "",
+    stories_context_general: t.stories_context_general ?? "",
+    stories_context_keywords: t.stories_context_keywords ?? "",
+    ads_context_general: t.ads_context_general ?? "",
+    ads_context_keywords: t.ads_context_keywords ?? "",
+    lead_notification_email: t.lead_notification_email ?? "",
+    admin_phone: t.admin_phone ?? "",
+    admin_system_prompt: t.admin_system_prompt ?? "",
+    agent_system_prompt: t.agent_system_prompt ?? "",
+    ig_agent_system_prompt: t.ig_agent_system_prompt ?? "",
+  };
+}
+
+/** Convierte "" → null para campos opcionales; mantiene undefined para no tocar columnas no editadas. */
+function formToPatch(f: FormState) {
+  const orEmpty = (v: string) => (v.trim() === "" ? null : v);
+  return {
+    // Agent (017)
+    agent_tone: f.agent_tone === "" ? null : f.agent_tone,
+    agent_orthography: f.agent_orthography,
+    agent_active_offer: orEmpty(f.agent_active_offer),
+    agent_business_hours: orEmpty(f.agent_business_hours),
+    agent_business_hours_alert: f.agent_business_hours_alert,
+    agent_temporary_closures: orEmpty(f.agent_temporary_closures),
+    agent_special_instructions: orEmpty(f.agent_special_instructions),
+
+    // Catálogo
+    google_sheet_id: orEmpty(f.google_sheet_id),
+    google_sheet_range: f.google_sheet_range.trim() === "" ? undefined : f.google_sheet_range,
+
+    // Contextos
+    stories_context_general: orEmpty(f.stories_context_general),
+    stories_context_keywords: orEmpty(f.stories_context_keywords),
+    ads_context_general: orEmpty(f.ads_context_general),
+    ads_context_keywords: orEmpty(f.ads_context_keywords),
+
+    // Notificaciones
+    lead_notification_email: orEmpty(f.lead_notification_email),
+
+    // Integraciones
+    admin_phone: orEmpty(f.admin_phone),
+    admin_system_prompt: orEmpty(f.admin_system_prompt),
+
+    // Avanzado
+    agent_system_prompt: f.agent_system_prompt.trim() === "" ? undefined : f.agent_system_prompt,
+    ig_agent_system_prompt: orEmpty(f.ig_agent_system_prompt),
+  };
+}
+
