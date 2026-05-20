@@ -34,6 +34,7 @@ export type Database = {
           catalog_text_cached_at: string | null
           lead_notification_email: string | null
           lead_scoring_prompt: string | null
+          lead_reset_after_days: number | null
           meli_agent_system_prompt: string | null
           meli_auto_answer: boolean
           meli_enabled: boolean
@@ -63,6 +64,7 @@ export type Database = {
           catalog_text_cached_at?: string | null
           lead_notification_email?: string | null
           lead_scoring_prompt?: string | null
+          lead_reset_after_days?: number | null
           meli_agent_system_prompt?: string | null
           meli_auto_answer?: boolean
           meli_enabled?: boolean
@@ -92,6 +94,7 @@ export type Database = {
           catalog_text_cached_at?: string | null
           lead_notification_email?: string | null
           lead_scoring_prompt?: string | null
+          lead_reset_after_days?: number | null
           meli_agent_system_prompt?: string | null
           meli_auto_answer?: boolean
           meli_enabled?: boolean

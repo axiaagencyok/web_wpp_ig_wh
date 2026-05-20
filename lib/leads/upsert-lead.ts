@@ -4,9 +4,10 @@ import type { Conversation, Lead, Tenant } from "@/types/database.types";
 import type { ScoringResult } from "./scoring-agent";
 
 const NOTIFICATION_THRESHOLD = 60;
+const RESET_DAYS_DEFAULT = 3;
 
 export interface UpsertLeadParams {
-  tenant: Pick<Tenant, "id" | "name" | "lead_notification_email">;
+  tenant: Pick<Tenant, "id" | "name" | "lead_notification_email" | "lead_reset_after_days">;
   conversation: Pick<Conversation, "id" | "contact_phone" | "contact_name" | "custom_fields">;
   scoring: ScoringResult;
 }
@@ -14,12 +15,38 @@ export interface UpsertLeadParams {
 /**
  * Persiste (o actualiza) el lead derivado de una conversación de Instagram.
  *
- * - Upsert por (tenant_id, manychat_id). Si ya existía, actualiza datos pero
- *   NO resetea notificado_at — eso garantiza una sola notificación por lead.
- * - Si el score post-upsert >= 60 y notificado_at sigue NULL, marca
- *   notificado_at=now() y dispara `sendLeadNotification` **fire-and-forget**.
- * - El caller obtiene el lead final como retorno (o null si algo falló).
+ * Comportamiento:
+ *
+ *   1. Si no existe un lead previo para (tenant_id, manychat_id) → INSERT con
+ *      estado='Nuevo' (default del schema), es_recurrente=false (default),
+ *      compras_anteriores=0 (default).
+ *
+ *   2. Si EXISTE un lead previo:
+ *      a. Chequea condiciones de "reset":
+ *           - estado IN ('Cerrado','Descartado'), o
+ *           - updated_at más viejo que tenant.lead_reset_after_days días
+ *             (default 3 si la columna es NULL).
+ *      b. Si cumple alguna → trata el turno como un cliente recurrente:
+ *           estado='Nuevo', notificado_at=null, es_recurrente=true,
+ *           compras_anteriores += 1, y sobrescribe los campos de scoring.
+ *           El nullify de notificado_at habilita una nueva notificación
+ *           si el score post-reset supera el umbral.
+ *      c. Si NO cumple ninguna → UPDATE preservando estado/notificado_at/
+ *           es_recurrente/compras_anteriores. Solo se refrescan los campos
+ *           de scoring (datos del último turno).
+ *
+ *   3. En todos los casos, si el lead post-upsert tiene `lead_score >= 60`
+ *      Y `notificado_at IS NULL`, se stampea `notificado_at=now()` con un
+ *      guard `is null` (anti doble notificación bajo concurrencia) y se
+ *      dispara `sendLeadNotification` fire-and-forget.
+ *
+ * Nunca tira excepción al caller — errores se logean y la función devuelve null.
  */
+
+export interface SendAnswerResult {
+  // (no usado — placeholder para mantener typecheck si alguien importa este file)
+}
+
 export async function upsertLead(params: UpsertLeadParams): Promise<Lead | null> {
   const { tenant, conversation, scoring } = params;
 
@@ -32,11 +59,8 @@ export async function upsertLead(params: UpsertLeadParams): Promise<Lead | null>
   const igUsername =
     typeof customFields.ig_username === "string" ? customFields.ig_username : null;
 
-  const insertPayload = {
-    tenant_id: tenant.id,
-    conversation_id: conversation.id,
-    manychat_id: manychatId,
-    instagram_user: igUsername,
+  // Campos del scoring — SIEMPRE se sobreescriben en cada turno (reset o no).
+  const scoringFields = {
     nombre: scoring.nombre,
     zona: scoring.zona,
     tipo_proyecto: scoring.tipo_proyecto,
@@ -45,38 +69,108 @@ export async function upsertLead(params: UpsertLeadParams): Promise<Lead | null>
     urgencia: scoring.urgencia,
     lead_score: scoring.lead_score,
     resumen_conversacion: scoring.resumen_conversacion,
+  } as const;
+
+  // Payload para INSERT (lead nuevo).
+  const insertPayload = {
+    tenant_id: tenant.id,
+    conversation_id: conversation.id,
+    manychat_id: manychatId,
+    instagram_user: igUsername,
+    ...scoringFields,
   };
 
-  // Upsert por (tenant_id, manychat_id) cuando manychat_id existe.
-  // Si manychat_id es null (no debería pasar en IG real, pero por las dudas),
-  // caemos a un insert plano.
   let lead: Lead | null = null;
 
-  if (manychatId) {
-    const { data, error } = await adminClient
-      .from("Leads")
-      .upsert(insertPayload, { onConflict: "tenant_id,manychat_id" })
-      .select("*")
-      .single();
-    if (error) {
-      console.error(`[upsertLead] upsert error (tenant ${tenant.id}, manychat ${manychatId}):`, error.message);
-      return null;
-    }
-    lead = data;
-  } else {
+  if (!manychatId) {
+    // Sin manychat_id no podemos identificar al cliente — solo INSERT plano.
     const { data, error } = await adminClient
       .from("Leads")
       .insert(insertPayload)
       .select("*")
       .single();
-    if (error) {
-      console.error(`[upsertLead] insert error (tenant ${tenant.id}, conv ${conversation.id}):`, error.message);
+    if (error || !data) {
+      console.error(`[upsertLead] insert error (tenant ${tenant.id}, conv ${conversation.id}):`, error?.message);
       return null;
     }
     lead = data;
+  } else {
+    // Lookup explícito en vez de upsert ciego — necesitamos saber si existe
+    // y decidir reset vs update.
+    const { data: existing, error: lookupErr } = await adminClient
+      .from("Leads")
+      .select("id, estado, notificado_at, updated_at, compras_anteriores")
+      .eq("tenant_id", tenant.id)
+      .eq("manychat_id", manychatId)
+      .maybeSingle();
+    if (lookupErr) {
+      console.error(`[upsertLead] lookup error (tenant ${tenant.id}, manychat ${manychatId}):`, lookupErr.message);
+      return null;
+    }
+
+    if (!existing) {
+      // Lead nuevo → INSERT
+      const { data, error } = await adminClient
+        .from("Leads")
+        .insert(insertPayload)
+        .select("*")
+        .single();
+      if (error || !data) {
+        console.error(`[upsertLead] insert error (tenant ${tenant.id}, manychat ${manychatId}):`, error?.message);
+        return null;
+      }
+      lead = data;
+    } else {
+      // Lead existente — evaluar reset vs update preservador.
+      const resetDays = tenant.lead_reset_after_days ?? RESET_DAYS_DEFAULT;
+      const updatedAtMs = new Date(existing.updated_at).getTime();
+      const isStale = Date.now() - updatedAtMs > resetDays * 86_400_000;
+      const isClosed = existing.estado === "Cerrado" || existing.estado === "Descartado";
+      const shouldReset = isStale || isClosed;
+
+      const baseUpdate = {
+        ...scoringFields,
+        conversation_id: conversation.id,
+        instagram_user: igUsername,
+      };
+
+      const updatePayload = shouldReset
+        ? {
+            ...baseUpdate,
+            estado: "Nuevo" as const,
+            notificado_at: null,
+            es_recurrente: true,
+            compras_anteriores: (existing.compras_anteriores ?? 0) + 1,
+          }
+        : baseUpdate;
+
+      if (shouldReset) {
+        const reason = isClosed
+          ? `estado=${existing.estado}`
+          : `updated_at +${resetDays}d`;
+        console.log(
+          `[upsertLead] reset lead ${existing.id} (tenant ${tenant.id}, manychat ${manychatId}): ${reason}`
+        );
+      }
+
+      const { data, error } = await adminClient
+        .from("Leads")
+        .update(updatePayload)
+        .eq("id", existing.id)
+        .select("*")
+        .single();
+      if (error || !data) {
+        console.error(`[upsertLead] update error for lead ${existing.id}:`, error?.message);
+        return null;
+      }
+      lead = data;
+    }
   }
 
   // Notificación: solo si score supera umbral Y no se notificó antes.
+  // En el caso de reset, notificado_at se nulleó arriba → si el nuevo score
+  // >= 60, se notifica de nuevo (caso real: cliente recurrente que califica
+  // alto otra vez tras venir cerrado).
   if (lead && lead.lead_score !== null && lead.lead_score >= NOTIFICATION_THRESHOLD && !lead.notificado_at) {
     const now = new Date().toISOString();
     const { data: stamped, error: stampErr } = await adminClient
@@ -84,7 +178,7 @@ export async function upsertLead(params: UpsertLeadParams): Promise<Lead | null>
       .update({ notificado_at: now })
       .eq("id", lead.id)
       // Re-chequear notificado_at sigue NULL acá previene una doble notificación
-      // si dos turnos concurrentes pasan el umbral al mismo tiempo (raro pero posible).
+      // si dos turnos concurrentes pasan el umbral al mismo tiempo.
       .is("notificado_at", null)
       .select("*")
       .single();
@@ -93,7 +187,6 @@ export async function upsertLead(params: UpsertLeadParams): Promise<Lead | null>
       console.error(`[upsertLead] stamp notificado_at error lead ${lead.id}:`, stampErr.message);
     } else if (stamped) {
       lead = stamped;
-      // Fire-and-forget. Cualquier error queda logueado dentro de sendLeadNotification.
       void sendLeadNotification(lead, tenant).catch((e) =>
         console.error(`[upsertLead] sendLeadNotification rejected for lead ${lead?.id}:`, (e as Error).message)
       );
