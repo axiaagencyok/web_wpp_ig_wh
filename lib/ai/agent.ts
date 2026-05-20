@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { adminClient } from "@/lib/supabase/admin";
-import { getLucasSystemPrompt } from "./lucas-prompt";
+import { composeSystemPrompt } from "@/lib/agents/compose-prompt";
 import { getMessagingProvider } from "@/lib/messaging";
 import { getTenantCatalog } from "./business-context";
 import { buildImageContentBlock, buildAudioText, transcribePendingAudio } from "./media-handler";
@@ -13,11 +13,6 @@ const MAX_HISTORY_MESSAGES = 30;
 const MODEL = "claude-sonnet-4-5";
 const FALLBACK_MODEL = "claude-haiku-4-5-20251001";
 const RETRY_DELAYS_MS = [1_000, 3_000, 9_000];
-
-// Appended to every tenant's system prompt — non-negotiable behavioral rule
-const AGENT_BASE_RULES = `
-
-REGLA CRÍTICA DE CONVERSACIÓN: Nunca te despidas ni cierres la conversación a menos que el cliente diga explícitamente "gracias", "chau", "listo", "hasta luego" o algo equivalente. Si el cliente está consultando, respondé la consulta — no asumas que terminó.`;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -191,12 +186,15 @@ export async function runAgent(
 
   const loopMessages: Anthropic.MessageParam[] = [...messageHistory];
 
-  const tenantSystemPrompt = getLucasSystemPrompt(tenant);
+  // Mati (agente WhatsApp, ex-Lucas) — el system prompt sale del compose-prompt
+  // que mergea la plantilla base con la config estructurada del tenant. El
+  // catálogo se trae bajo demanda con la tool get_catalog, no se pre-inyecta.
+  const tenantSystemPrompt = composeSystemPrompt(tenant, "mati_wpp");
 
   for (let iteration = 0; iteration < 10; iteration++) {
     const response = await callClaude({
       max_tokens: 4096,
-      system: tenantSystemPrompt + AGENT_BASE_RULES,
+      system: tenantSystemPrompt,
       tools: TOOL_DEFINITIONS,
       messages: loopMessages,
     });

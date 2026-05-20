@@ -632,8 +632,8 @@ function AdvancedTab({
       </div>
 
       <SectionHeader
-        title="Lucas — agente WhatsApp"
-        body="Prompt completo del agente para conversaciones por WhatsApp."
+        title="Mati — agente WhatsApp"
+        body="Prompt completo del agente para conversaciones por WhatsApp. Quedó como histórico — el runtime ya no lee este campo (ver compose-prompt)."
       />
 
       <Card>
@@ -642,7 +642,7 @@ function AdvancedTab({
             value={form.agent_system_prompt}
             onChange={(v) => onChange("agent_system_prompt", v)}
             rows={14}
-            placeholder="Sos Lucas, el asistente virtual de…"
+            placeholder="Sos Mati, el asistente virtual de…"
             mono
           />
         </Field>
