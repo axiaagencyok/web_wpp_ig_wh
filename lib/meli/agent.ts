@@ -17,7 +17,7 @@ import type { MeliAccount, MeliQuestion, Tenant } from "@/types/database.types";
  */
 
 const MAX_ANSWER_CHARS = 2000;
-const DEFAULT_MODEL = "claude-sonnet-4-20250514";
+const DEFAULT_MODEL = "claude-sonnet-4-5";
 
 interface MeliItemDetail {
   id: string;
