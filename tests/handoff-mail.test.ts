@@ -170,4 +170,44 @@ describe("sendHandoffEmail — path feliz", () => {
     expect(arg.html).not.toContain("<script>alert(1)</script>");
     expect(arg.html).toContain("&lt;script&gt;");
   });
+
+  it("usa @ig_username como label primario en subject y body para IG", async () => {
+    const { sendHandoffEmail } = await import("@/lib/notifications/handoff");
+    await sendHandoffEmail(baseTenant, { ...baseConv, ig_username: "juanperez" });
+    const arg = (sendMock.mock.calls[0] as unknown as [{
+      subject: string;
+      html:    string;
+      text:    string;
+    }])[0];
+    expect(arg.subject).toContain("@juanperez");
+    expect(arg.html).toContain("@juanperez");
+    expect(arg.text).toContain("Instagram: @juanperez");
+  });
+
+  it("cae a contact_name si no llega ig_username (caso WPP)", async () => {
+    const { sendHandoffEmail } = await import("@/lib/notifications/handoff");
+    await sendHandoffEmail(baseTenant, {
+      ...baseConv,
+      channel: "whatsapp" as const,
+      ig_username: null,
+    });
+    const arg = (sendMock.mock.calls[0] as unknown as [{
+      subject: string;
+      html:    string;
+      text:    string;
+    }])[0];
+    expect(arg.subject).toContain("Juan");
+    expect(arg.text).not.toContain("Instagram:");
+  });
+
+  it("escapa el ig_username para evitar inyección HTML", async () => {
+    const { sendHandoffEmail } = await import("@/lib/notifications/handoff");
+    await sendHandoffEmail(baseTenant, {
+      ...baseConv,
+      ig_username: "<script>x</script>",
+    });
+    const arg = (sendMock.mock.calls[0] as unknown as [{ html: string }])[0];
+    expect(arg.html).not.toContain("<script>x</script>");
+    expect(arg.html).toContain("&lt;script&gt;");
+  });
 });
