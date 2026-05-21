@@ -1,0 +1,140 @@
+// Smoke de webhooks externos — Manychat (Instagram) y Mercado Libre.
+//
+// El objetivo no es testear el agente completo, sino verificar que:
+//   1. El handler parsea el payload sin tirar.
+//   2. Devuelve 2xx para payloads válidos (Manychat y MELI re-tiran si no
+//      responden 200 rápido).
+//   3. Devuelve 4xx para payloads inválidos.
+//
+// El trabajo pesado pasa dentro de `after()` (Next defiere hasta cerrar
+// la respuesta HTTP). Mockeamos `after` con un no-op para que el test no
+// dispare procesamiento de fondo — eso queda para tests de integración
+// del agente cuando los armemos.
+
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { createSupabaseMock } from "./helpers/supabase-mock";
+
+const supabase = createSupabaseMock({
+  tenants: {
+    row: {
+      id: "00000000-0000-0000-0000-000000000001",
+      agent_enabled: true,
+      buffer_seconds: 5,
+    },
+  },
+});
+
+vi.mock("@/lib/supabase/admin", () => ({
+  adminClient: supabase.client,
+}));
+
+vi.mock("@/lib/ai/buffer", () => ({
+  upsertBuffer: vi.fn(async () => undefined),
+}));
+
+vi.mock("next/server", async () => {
+  const actual = await vi.importActual<typeof import("next/server")>("next/server");
+  return {
+    ...actual,
+    after: (fn: () => void | Promise<void>) => {
+      // No-op: no disparamos el background work en tests.
+      void fn;
+    },
+  };
+});
+
+beforeEach(() => {
+  supabase.calls.length = 0;
+});
+
+function buildPost(url: string, body: unknown): Request {
+  return new Request(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+describe("POST /api/webhooks/manychat", () => {
+  it("acepta payload válido de Instagram con custom fields y devuelve 200", async () => {
+    const { POST } = await import("@/app/api/webhooks/manychat/route");
+
+    const payload = {
+      "full-data": {
+        id: "manychat_12345",
+        first_name: "Juan",
+        ig_username: "juan.test",
+        last_input_text: "Hola, quería info del SPC click",
+        ig_last_interaction: new Date().toISOString(),
+        custom_fields: {
+          producto_consultado: "SPC click 4mm",
+          story_reply: false,
+          ad_click: false,
+          post_comment: false,
+          post_context: "-",
+        },
+      },
+    };
+
+    const res = await POST(buildPost("https://test/api/webhooks/manychat", payload) as never);
+    expect(res.status).toBe(200);
+  });
+
+  it("devuelve 400 cuando el body no es JSON parseable", async () => {
+    const { POST } = await import("@/app/api/webhooks/manychat/route");
+
+    const req = new Request("https://test/api/webhooks/manychat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{not-json",
+    });
+
+    const res = await POST(req as never);
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("POST /api/webhooks/meli", () => {
+  it("acepta payload de pregunta de MELI y devuelve 200 rápido", async () => {
+    const { POST } = await import("@/app/api/webhooks/meli/route");
+
+    const payload = {
+      topic: "questions",
+      resource: "/questions/12345",
+      user_id: 99999999,
+      application_id: 1234567890,
+      sent: new Date().toISOString(),
+      attempts: 1,
+      _id: "abc123",
+      received: new Date().toISOString(),
+    };
+
+    const res = await POST(buildPost("https://test/api/webhooks/meli", payload) as never);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean };
+    expect(body.ok).toBe(true);
+  });
+
+  it("ignora topics que no son questions con 200 (no-retry de MELI)", async () => {
+    const { POST } = await import("@/app/api/webhooks/meli/route");
+    const payload = {
+      topic: "orders",
+      resource: "/orders/12345",
+      user_id: 99999999,
+      _id: "xyz",
+    };
+    const res = await POST(buildPost("https://test/api/webhooks/meli", payload) as never);
+    expect(res.status).toBe(200);
+  });
+
+  it("devuelve 400 cuando el body no es JSON", async () => {
+    const { POST } = await import("@/app/api/webhooks/meli/route");
+    const req = new Request("https://test/api/webhooks/meli", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{",
+    });
+    const res = await POST(req as never);
+    expect(res.status).toBe(400);
+  });
+});
