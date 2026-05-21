@@ -10,13 +10,17 @@ import type { Tenant } from "@/types/database.types";
  *      (`tenants.{ig|wpp|meli}_agent_system_prompt`), editable desde el panel
  *      "Prompts del agente". Es la fuente única de verdad — NO hay plantilla
  *      base hardcodeada por código.
- *   2. Acá lo que hacemos es:
- *      - Prefijar al prompt del tenant el catálogo (resuelto vía
- *        `getCatalogText`) y, si aplica, el `commentContext` IG persistente.
- *      - Conservar los contextos dinámicos por turno (stories / ads / post)
- *        que el caller pasa explícito.
- *      - Sufijar una regla GLOBAL anti-alucinación, fija y no editable, que
- *        rige para TODOS los canales.
+ *   2. Orden del prompt final:
+ *      - BASE: el prompt del tenant tal cual está en DB. Define voz, marca y
+ *        reglas; va PRIMERO para que el modelo lo lea antes que cualquier
+ *        material de referencia (de lo contrario un catálogo gigante lo
+ *        sepulta y el modelo lo trata como nota al pie).
+ *      - Catálogo (resuelto vía `getCatalogText`) y, si aplica, el
+ *        `commentContext` IG persistente — material de referencia auxiliar.
+ *      - Contextos dinámicos por turno (stories / ads / post) que el caller
+ *        pasa explícito.
+ *      - Regla GLOBAL anti-alucinación, fija y no editable, sufijada al final
+ *        para que cierre la conversación.
  *   3. Si el tenant no tiene prompt cargado para el canal pedido, tiramos
  *      error explícito. NO hay fallback genérico — un tenant sin prompt
  *      configurado no puede operar ese canal.
@@ -98,22 +102,24 @@ export async function composeSystemPrompt(
     catalogText = ctx.catalog.trim();
   }
 
-  const prefix = renderPrefix(catalogText, ctx.commentContext);
+  const reference = renderReference(catalogText, ctx.commentContext);
   const dynamic = renderDynamicContexts(ctx);
 
-  // Orden: prefijos (catálogo + contexto persistente del comentario) →
-  // prompt del tenant (fuente de verdad de la marca) → contextos del turno
-  // (stories / ads / post / meli item) → regla anti-alucinación global.
-  // El anti-alucinación va al final para que pese más en la decisión del
-  // modelo y no quede pisado por instrucciones del tenant.
-  return [prefix, tenantPrompt, dynamic, ANTI_HALLUCINATION_SUFFIX]
+  // Orden: prompt del tenant (BASE — voz, marca, reglas) → material de
+  // referencia (catálogo + contexto persistente del comentario) → contextos
+  // del turno (stories / ads / post / meli item) → regla anti-alucinación
+  // global. El tenant prompt va primero porque un catálogo de miles de
+  // líneas sepulta cualquier instrucción que venga atrás; el modelo trata
+  // como dominante lo que lee en los primeros tokens. El anti-alucinación
+  // queda al final para cerrar.
+  return [tenantPrompt, reference, dynamic, ANTI_HALLUCINATION_SUFFIX]
     .filter((b) => b && b.trim().length > 0)
     .join("\n\n");
 }
 
-// ─── Render: prefix bloques fijos (catálogo + comment context) ───────────────
+// ─── Render: material de referencia (catálogo + comment context) ────────────
 
-function renderPrefix(catalog: string, commentContext?: string): string {
+function renderReference(catalog: string, commentContext?: string): string {
   const blocks: string[] = [];
 
   if (catalog) {
