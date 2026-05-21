@@ -125,6 +125,57 @@ describe("composeSystemPrompt con commentContext", () => {
       composeSystemPrompt({ ...TENANT, ig_agent_system_prompt: "   " }, "ig", { catalog: "" })
     ).rejects.toThrow(/no tiene prompt configurado para canal Instagram/);
   });
+
+  // ── story_context: 3 casos del flow persistente from_story + tenant ────────
+  //
+  // El boolean `story_context` (ManyChat) → `from_story` (conversations).
+  // Cuando está activo, cami-agent resuelve el TEXTO desde
+  // tenant.stories_context_general/_keywords y se lo pasa a compose-prompt
+  // como `storyContext`. Cuando no hay flag o el tenant no tiene cargado
+  // nada, compose-prompt recibe `undefined` y NO inyecta el bloque.
+
+  it("[story con contexto cargado] inyecta CONTEXTO DE LA STORY IG (PERSISTENTE) con el texto del tenant", async () => {
+    const prompt = await composeSystemPrompt(TENANT, "ig", {
+      catalog: "",
+      storyContext: "Hoy publicamos vasos de vidrio\nPalabras clave: VASOS: vasos de vidrio",
+    });
+
+    expect(prompt).toContain("CONTEXTO DE LA STORY IG (PERSISTENTE)");
+    expect(prompt).toContain("Hoy publicamos vasos de vidrio");
+    expect(prompt).toContain("VASOS: vasos de vidrio");
+    expect(prompt).toContain("respondiendo a una story específica");
+  });
+
+  it("[story sin contexto cargado] NO inyecta el bloque cuando el tenant no tiene stories_context_*", async () => {
+    // Simula el caso en que cami-agent vio from_story=true pero ni
+    // stories_context_general ni stories_context_keywords están cargados:
+    // el helper devuelve undefined y compose-prompt no inyecta nada.
+    const prompt = await composeSystemPrompt(TENANT, "ig", {
+      catalog: "",
+      storyContext: undefined,
+    });
+    expect(prompt).not.toContain("CONTEXTO DE LA STORY IG");
+  });
+
+  it("[no es story] NO inyecta el bloque cuando from_story está apagado", async () => {
+    // Conversación normal — cami-agent no llama con storyContext.
+    const prompt = await composeSystemPrompt(TENANT, "ig", { catalog: "" });
+    expect(prompt).not.toContain("CONTEXTO DE LA STORY IG");
+  });
+
+  it("storyContext queda en la sección de referencia, después del catálogo y junto al commentContext", async () => {
+    const prompt = await composeSystemPrompt(TENANT, "ig", {
+      catalog: "CATALOGO_FAKE_INLINE",
+      commentContext: "Comentó en post de SPC click",
+      storyContext: "Hoy publicamos vasos de vidrio",
+    });
+    const catalogIdx = prompt.indexOf("CATÁLOGO DE PRODUCTOS");
+    const commentIdx = prompt.indexOf("CONTEXTO DEL COMENTARIO IG");
+    const storyIdx = prompt.indexOf("CONTEXTO DE LA STORY IG");
+    expect(catalogIdx).toBeGreaterThanOrEqual(0);
+    expect(commentIdx).toBeGreaterThan(catalogIdx);
+    expect(storyIdx).toBeGreaterThan(catalogIdx);
+  });
 });
 
 // Silenciar warnings del cami logger durante el test

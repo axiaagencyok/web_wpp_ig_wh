@@ -49,6 +49,15 @@ export interface ComposeContext {
    * mientras esté presente, a diferencia de postContext que se consume.
    */
   commentContext?: string;
+  /**
+   * Contexto persistente de la story IG. El texto viene de
+   * `tenants.stories_context_general` (panel /settings > Contextos > Stories)
+   * y solo se inyecta cuando la conversación tiene `from_story = true` en
+   * `conversations.custom_fields` (seteado por el webhook cuando ManyChat
+   * marca el DM como respuesta a una story). El caller (cami-agent) resuelve
+   * y arma el string final antes de pasarlo acá.
+   */
+  storyContext?: string;
   /** Bloque adicional con datos del ítem MELI puntual (sólo MELI). */
   meliItem?: string;
 }
@@ -102,7 +111,7 @@ export async function composeSystemPrompt(
     catalogText = ctx.catalog.trim();
   }
 
-  const reference = renderReference(catalogText, ctx.commentContext);
+  const reference = renderReference(catalogText, ctx.commentContext, ctx.storyContext);
   const dynamic = renderDynamicContexts(ctx);
 
   // Orden: prompt del tenant (BASE — voz, marca, reglas) → material de
@@ -119,7 +128,7 @@ export async function composeSystemPrompt(
 
 // ─── Render: material de referencia (catálogo + comment context) ────────────
 
-function renderReference(catalog: string, commentContext?: string): string {
+function renderReference(catalog: string, commentContext?: string, storyContext?: string): string {
   const blocks: string[] = [];
 
   if (catalog) {
@@ -144,6 +153,25 @@ function renderReference(catalog: string, commentContext?: string): string {
         "conversación, no solo en el primer turno:",
         "",
         commentContext.trim(),
+        "",
+        "Si el cliente da una respuesta corta tipo 'sí', 'cuánto sale?', etc.",
+        "asumí que sigue hablando del producto/tema indicado arriba — no le",
+        "preguntes de qué quiere info, ya lo sabés.",
+      ].join("\n")
+    );
+  }
+
+  if (storyContext?.trim()) {
+    blocks.push(
+      [
+        "═══════════════════════════════════════════════════════════════",
+        "CONTEXTO DE LA STORY IG (PERSISTENTE)",
+        "═══════════════════════════════════════════════════════════════",
+        "El cliente está respondiendo a una story específica. Usá este",
+        "contexto para arrancar sabiendo qué le interesa. Tenelo presente",
+        "DURANTE TODA la conversación, no solo en el primer turno:",
+        "",
+        storyContext.trim(),
         "",
         "Si el cliente da una respuesta corta tipo 'sí', 'cuánto sale?', etc.",
         "asumí que sigue hablando del producto/tema indicado arriba — no le",

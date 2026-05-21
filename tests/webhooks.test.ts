@@ -20,7 +20,11 @@ const supabase = createSupabaseMock({
       id: "00000000-0000-0000-0000-000000000001",
       agent_enabled: true,
       buffer_seconds: 5,
+      manychat_api_key: "test-key",
     },
+  },
+  conversations: {
+    row: { id: "conv-1", automation_paused: false },
   },
 });
 
@@ -32,19 +36,43 @@ vi.mock("@/lib/ai/buffer", () => ({
   upsertBuffer: vi.fn(async () => undefined),
 }));
 
+// Capturamos las callbacks de `after()` en un array exportable para que los
+// tests que necesitan verificar background work (ej. cleanup de ManyChat) las
+// puedan ejecutar a mano. Por defecto NO se disparan automáticamente.
+const afterCallbacks: Array<() => void | Promise<void>> = [];
+
 vi.mock("next/server", async () => {
   const actual = await vi.importActual<typeof import("next/server")>("next/server");
   return {
     ...actual,
     after: (fn: () => void | Promise<void>) => {
-      // No-op: no disparamos el background work en tests.
-      void fn;
+      afterCallbacks.push(fn);
     },
+  };
+});
+
+const clearStoryContextFlagMock = vi.fn(async () => undefined);
+const clearContextoComentarioFlagMock = vi.fn(async () => undefined);
+
+vi.mock("@/lib/instagram/manychat", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/instagram/manychat")>(
+    "@/lib/instagram/manychat",
+  );
+  return {
+    ...actual,
+    clearStoryContextFlag: clearStoryContextFlagMock,
+    clearContextoComentarioFlag: clearContextoComentarioFlagMock,
+    clearStoryReplyFlag: vi.fn(async () => undefined),
+    clearAdClickFlag: vi.fn(async () => undefined),
+    clearPostContextFlag: vi.fn(async () => undefined),
   };
 });
 
 beforeEach(() => {
   supabase.calls.length = 0;
+  afterCallbacks.length = 0;
+  clearStoryContextFlagMock.mockClear();
+  clearContextoComentarioFlagMock.mockClear();
 });
 
 function buildPost(url: string, body: unknown): Request {
@@ -91,6 +119,43 @@ describe("POST /api/webhooks/manychat", () => {
 
     const res = await POST(req as never);
     expect(res.status).toBe(400);
+  });
+
+  it("persiste from_story=true cuando story_context viene true y dispara cleanup en ManyChat", async () => {
+    const { POST } = await import("@/app/api/webhooks/manychat/route");
+
+    const payload = {
+      "full-data": {
+        id: "manychat_story_42",
+        first_name: "Lara",
+        ig_username: "lara.test",
+        last_input_text: "Cuánto sale?",
+        ig_last_interaction: new Date().toISOString(),
+        custom_fields: {
+          story_context: true,
+        },
+      },
+    };
+
+    const res = await POST(buildPost("https://test/api/webhooks/manychat", payload) as never);
+    expect(res.status).toBe(200);
+
+    // El handler delega el procesamiento al `after()` del route, que a su
+    // vez encola MÁS `after()` (cleanup de ManyChat). Drenamos la cola hasta
+    // que no queden callbacks pendientes.
+    while (afterCallbacks.length > 0) {
+      const cb = afterCallbacks.shift()!;
+      await cb();
+    }
+
+    const upsert = supabase.calls.find(
+      (c) => c.table === "conversations" && c.op === "upsert",
+    );
+    expect(upsert).toBeDefined();
+    const upsertPayload = upsert!.payload as { custom_fields: Record<string, unknown> };
+    expect(upsertPayload.custom_fields.from_story).toBe(true);
+
+    expect(clearStoryContextFlagMock).toHaveBeenCalledWith("manychat_story_42", "test-key");
   });
 
   it("acepta payload con manual_reply=true y procesa last_output_text", async () => {
