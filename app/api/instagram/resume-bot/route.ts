@@ -21,7 +21,22 @@ export async function POST(req: NextRequest) {
   const { subscriber_id } = parsed.data;
 
   try {
-    await resumeInstagramBot(subscriber_id);
+    const { data: conv } = await adminClient
+      .from("conversations")
+      .select("tenant_id")
+      .eq("contact_phone", `instagram:${subscriber_id}`)
+      .eq("channel", "instagram")
+      .maybeSingle();
+    const tenantKey = conv
+      ? (await adminClient
+          .from("tenants")
+          .select("manychat_api_key")
+          .eq("id", conv.tenant_id)
+          .single()
+        ).data?.manychat_api_key ?? null
+      : null;
+
+    await resumeInstagramBot(subscriber_id, tenantKey);
 
     await adminClient
       .from("conversations")

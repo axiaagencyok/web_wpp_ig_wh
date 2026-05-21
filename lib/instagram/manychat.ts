@@ -1,8 +1,11 @@
 const MANYCHAT_API_BASE = "https://api.manychat.com";
 
-function apiKey(): string {
-  const key = process.env.MANYCHAT_API_KEY;
-  if (!key) throw new Error("MANYCHAT_API_KEY not set");
+// Resolver de API key: prefiere el valor pasado por el caller (de la fila
+// del tenant), cae a la env var por compatibilidad con el setup de un solo
+// ManyChat. Lanza si ninguno está disponible.
+function resolveKey(apiKey?: string | null): string {
+  const key = apiKey?.trim() || process.env.MANYCHAT_API_KEY;
+  if (!key) throw new Error("MANYCHAT_API_KEY not set (tenant key missing and env var unset)");
   return key;
 }
 
@@ -21,12 +24,13 @@ export class ManyChatError extends Error {
 
 export async function sendInstagramMessage(
   subscriberId: string,
-  text: string
+  text: string,
+  apiKey?: string | null,
 ): Promise<void> {
   const res = await fetch(`${MANYCHAT_API_BASE}/fb/sending/sendContent`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey()}`,
+      Authorization: `Bearer ${resolveKey(apiKey)}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -48,11 +52,11 @@ export async function sendInstagramMessage(
   console.log(`[manychat] sendContent OK for subscriber ${subscriberId}:`, resBody.slice(0, 200));
 }
 
-export async function pauseInstagramBot(subscriberId: string): Promise<void> {
+export async function pauseInstagramBot(subscriberId: string, apiKey?: string | null): Promise<void> {
   const res = await fetch(`${MANYCHAT_API_BASE}/instagram/subscriber/pause_bot`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey()}`,
+      Authorization: `Bearer ${resolveKey(apiKey)}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ subscriber_id: subscriberId }),
@@ -64,11 +68,11 @@ export async function pauseInstagramBot(subscriberId: string): Promise<void> {
   }
 }
 
-export async function resumeInstagramBot(subscriberId: string): Promise<void> {
+export async function resumeInstagramBot(subscriberId: string, apiKey?: string | null): Promise<void> {
   const res = await fetch(`${MANYCHAT_API_BASE}/instagram/subscriber/resume_bot`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey()}`,
+      Authorization: `Bearer ${resolveKey(apiKey)}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ subscriber_id: subscriberId }),
@@ -85,10 +89,12 @@ export async function resumeInstagramBot(subscriberId: string): Promise<void> {
  * Called fire-and-forget after processing a story reply so the flag is
  * consumed only once and doesn't bleed into subsequent messages.
  */
-export async function clearStoryReplyFlag(subscriberId: string): Promise<void> {
-  const key = process.env.MANYCHAT_API_KEY;
-  if (!key) {
-    console.error("[manychat] MANYCHAT_API_KEY not set — cannot clear story_reply flag");
+export async function clearStoryReplyFlag(subscriberId: string, apiKey?: string | null): Promise<void> {
+  let key: string;
+  try {
+    key = resolveKey(apiKey);
+  } catch {
+    console.error("[manychat] no API key — cannot clear story_reply flag");
     return;
   }
 
@@ -118,10 +124,12 @@ export async function clearStoryReplyFlag(subscriberId: string): Promise<void> {
  * Called fire-and-forget after processing an ad click so the flag is
  * consumed only once and doesn't bleed into subsequent messages.
  */
-export async function clearAdClickFlag(subscriberId: string): Promise<void> {
-  const key = process.env.MANYCHAT_API_KEY;
-  if (!key) {
-    console.error("[manychat] MANYCHAT_API_KEY not set — cannot clear ad_click flag");
+export async function clearAdClickFlag(subscriberId: string, apiKey?: string | null): Promise<void> {
+  let key: string;
+  try {
+    key = resolveKey(apiKey);
+  } catch {
+    console.error("[manychat] no API key — cannot clear ad_click flag");
     return;
   }
 
@@ -151,10 +159,12 @@ export async function clearAdClickFlag(subscriberId: string): Promise<void> {
  * Called fire-and-forget after processing a post/reel comment so the flags are
  * consumed only once and don't bleed into subsequent messages.
  */
-export async function clearPostContextFlag(subscriberId: string): Promise<void> {
-  const key = process.env.MANYCHAT_API_KEY;
-  if (!key) {
-    console.error("[manychat] MANYCHAT_API_KEY not set — cannot clear post_comment flag");
+export async function clearPostContextFlag(subscriberId: string, apiKey?: string | null): Promise<void> {
+  let key: string;
+  try {
+    key = resolveKey(apiKey);
+  } catch {
+    console.error("[manychat] no API key — cannot clear post_comment flag");
     return;
   }
 

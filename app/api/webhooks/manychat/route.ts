@@ -5,7 +5,7 @@ import { processInstagramMediaUrl, isInstagramMediaUrl } from "@/lib/instagram/m
 import { clearStoryReplyFlag, clearAdClickFlag, clearPostContextFlag } from "@/lib/instagram/manychat";
 import type { Json } from "@/types/database.types";
 
-interface ManyChatPayload {
+export interface ManyChatPayload {
   "full-data": {
     id: string;
     first_name: string;
@@ -48,7 +48,7 @@ function isManualReply(v: boolean | string | undefined): boolean {
   return v === true || v === "true" || v === "Yes" || v === "1";
 }
 
-async function processIncoming(payload: ManyChatPayload): Promise<void> {
+export async function processIncoming(payload: ManyChatPayload, tenantId: string): Promise<void> {
   const data = payload["full-data"];
   const manychatId = data.id;
   const nombre = data.first_name;
@@ -64,16 +64,14 @@ async function processIncoming(payload: ManyChatPayload): Promise<void> {
   const postContext = data.custom_fields?.post_context ?? null;
   const contextoComentario = data.custom_fields?.contexto_comentario?.trim() || null;
 
-  // Find tenant configured for Instagram (env: INSTAGRAM_TENANT_ID)
-  const tenantId = process.env.INSTAGRAM_TENANT_ID;
   if (!tenantId) {
-    console.error("[ig-webhook] INSTAGRAM_TENANT_ID not set");
+    console.error("[ig-webhook] tenantId not provided");
     return;
   }
 
   const { data: tenant } = await adminClient
     .from("tenants")
-    .select("id, agent_enabled, buffer_seconds")
+    .select("id, agent_enabled, buffer_seconds, manychat_api_key")
     .eq("id", tenantId)
     .single();
 
@@ -187,23 +185,25 @@ async function processIncoming(payload: ManyChatPayload): Promise<void> {
     await upsertBuffer(conversation.id, tenant.buffer_seconds);
   }
 
+  const tenantKey = tenant.manychat_api_key ?? null;
+
   // Fire-and-forget: reset story_reply flag so it's consumed only once
   if (storyReply) {
-    clearStoryReplyFlag(manychatId).catch((e) =>
+    clearStoryReplyFlag(manychatId, tenantKey).catch((e) =>
       console.error("[ig-webhook] clearStoryReplyFlag error:", (e as Error).message)
     );
   }
 
   // Fire-and-forget: reset ad_click flag so it's consumed only once
   if (adClick) {
-    clearAdClickFlag(manychatId).catch((e) =>
+    clearAdClickFlag(manychatId, tenantKey).catch((e) =>
       console.error("[ig-webhook] clearAdClickFlag error:", (e as Error).message)
     );
   }
 
   // Fire-and-forget: reset post_comment/post_context flags so they're consumed only once
   if (postComment) {
-    clearPostContextFlag(manychatId).catch((e) =>
+    clearPostContextFlag(manychatId, tenantKey).catch((e) =>
       console.error("[ig-webhook] clearPostContextFlag error:", (e as Error).message)
     );
   }
@@ -213,6 +213,10 @@ async function processIncoming(payload: ManyChatPayload): Promise<void> {
   );
 }
 
+// Legacy webhook sin tenantId en la URL. Resuelve el tenant desde
+// INSTAGRAM_TENANT_ID (env var). Se mantiene por compatibilidad mientras
+// los flows existentes de ManyChat siguen apuntando acá; los flows nuevos
+// deben usar /api/webhooks/manychat/[tenantId] para soportar multi-tenant.
 export async function POST(req: NextRequest) {
   let body: unknown;
   try {
@@ -221,11 +225,17 @@ export async function POST(req: NextRequest) {
     return new NextResponse("Bad Request", { status: 400 });
   }
 
-  console.log("[ig-webhook] Received payload:", JSON.stringify(body).slice(0, 300));
+  console.log("[ig-webhook] Received payload (legacy):", JSON.stringify(body).slice(0, 300));
+
+  const tenantId = process.env.INSTAGRAM_TENANT_ID;
+  if (!tenantId) {
+    console.error("[ig-webhook] INSTAGRAM_TENANT_ID not set on legacy endpoint");
+    return new NextResponse("OK", { status: 200 });
+  }
 
   after(async () => {
     try {
-      await processIncoming(body as ManyChatPayload);
+      await processIncoming(body as ManyChatPayload, tenantId);
     } catch (e) {
       console.error("[ig-webhook] Processing error:", (e as Error).message);
     }

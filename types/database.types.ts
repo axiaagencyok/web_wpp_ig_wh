@@ -49,6 +49,7 @@ export type Database = {
           agent_special_instructions: string | null
           instagram_enabled: boolean
           whatsapp_enabled: boolean
+          manychat_api_key: string | null
           created_at: string
         }
         Insert: {
@@ -90,6 +91,7 @@ export type Database = {
           agent_special_instructions?: string | null
           instagram_enabled?: boolean
           whatsapp_enabled?: boolean
+          manychat_api_key?: string | null
           created_at?: string
         }
         Update: {
@@ -131,6 +133,7 @@ export type Database = {
           agent_special_instructions?: string | null
           instagram_enabled?: boolean
           whatsapp_enabled?: boolean
+          manychat_api_key?: string | null
           created_at?: string
         }
         Relationships: []

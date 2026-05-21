@@ -273,7 +273,10 @@ export async function processCamiConversation(conversationId: string): Promise<v
     if (hasPostContext) {
       clearedFields.post_comment = false;
       clearedFields.post_context = "-";
-      clearPostContextFlag(conversation.contact_phone.replace("instagram:", "")).catch((e) =>
+      clearPostContextFlag(
+        conversation.contact_phone.replace("instagram:", ""),
+        tenant.manychat_api_key ?? null,
+      ).catch((e) =>
         console.error("[cami] clearPostContextFlag error:", (e as Error).message)
       );
     }
@@ -411,7 +414,7 @@ export async function processCamiConversation(conversationId: string): Promise<v
   if (finalText.includes("Te derivaré con un supervisor.")) {
     let shouldDerive = true;
     try {
-      await pauseInstagramBot(subscriberId);
+      await pauseInstagramBot(subscriberId, tenant.manychat_api_key ?? null);
     } catch (err) {
       if (err instanceof ManyChatError && !err.isTransient) {
         // 404 (y otros 4xx no-críticos): seguimos el flow normal. El cliente
@@ -475,7 +478,7 @@ export async function processCamiConversation(conversationId: string): Promise<v
 
   // Send via ManyChat
   try {
-    await sendInstagramMessage(subscriberId, finalText);
+    await sendInstagramMessage(subscriberId, finalText, tenant.manychat_api_key ?? null);
     await adminClient
       .from("messages")
       .update({ status: "sent" })

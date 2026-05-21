@@ -45,6 +45,7 @@ const TENANT: Tenant = {
   meli_enabled: false,
   instagram_enabled: true,
   whatsapp_enabled: false,
+  manychat_api_key: null,
   twilio_account_sid: null,
   twilio_auth_token_encrypted: null,
   created_at: new Date().toISOString(),

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { adminClient } from "@/lib/supabase/admin";
 import { pauseInstagramBot, resumeInstagramBot } from "@/lib/instagram/manychat";
 
 export async function PATCH(
@@ -15,7 +16,7 @@ export async function PATCH(
   // Leer estado actual
   const { data: conv } = await supabase
     .from("conversations")
-    .select("automation_paused, channel, contact_phone")
+    .select("automation_paused, channel, contact_phone, tenant_id")
     .eq("id", id)
     .single();
 
@@ -38,11 +39,17 @@ export async function PATCH(
   // Sync pause/resume state with ManyChat for Instagram conversations
   if (conv.channel === "instagram") {
     const subscriberId = conv.contact_phone.replace("instagram:", "");
+    const { data: tenant } = await adminClient
+      .from("tenants")
+      .select("manychat_api_key")
+      .eq("id", conv.tenant_id)
+      .single();
+    const tenantKey = tenant?.manychat_api_key ?? null;
     try {
       if (newPaused) {
-        await pauseInstagramBot(subscriberId);
+        await pauseInstagramBot(subscriberId, tenantKey);
       } else {
-        await resumeInstagramBot(subscriberId);
+        await resumeInstagramBot(subscriberId, tenantKey);
       }
     } catch (e) {
       // Non-fatal — Supabase state already updated

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { adminClient } from "@/lib/supabase/admin";
 import { getMessagingProvider } from "@/lib/messaging";
+import { sendInstagramMessage } from "@/lib/instagram/manychat";
 import { z } from "zod";
 
 const bodySchema = z.object({
@@ -42,7 +43,7 @@ export async function POST(req: NextRequest) {
 
     const { data: conv, error: convError } = await supabase
       .from("conversations")
-      .select("id, contact_phone, tenant_id")
+      .select("id, contact_phone, tenant_id, channel")
       .eq("id", conversationId)
       .single();
 
@@ -52,9 +53,11 @@ export async function POST(req: NextRequest) {
     }
     if (!conv) return NextResponse.json({ error: "Conversación no encontrada" }, { status: 404 });
 
+    const isInstagram = conv.channel === "instagram";
+
     const { data: tenant, error: tenantError } = await adminClient
       .from("tenants")
-      .select("whatsapp_number")
+      .select("whatsapp_number, manychat_api_key")
       .eq("id", conv.tenant_id)
       .single();
 
@@ -86,6 +89,26 @@ export async function POST(req: NextRequest) {
       .from("conversations")
       .update({ last_message_at: new Date().toISOString() })
       .eq("id", conversationId);
+
+    if (isInstagram) {
+      const subscriberId = conv.contact_phone.replace(/^instagram:/, "");
+      try {
+        await sendInstagramMessage(subscriberId, message, tenant.manychat_api_key);
+        await adminClient
+          .from("messages")
+          .update({ status: "sent" })
+          .eq("id", savedMsg!.id);
+        return NextResponse.json({ success: true, messageId: savedMsg!.id });
+      } catch (err) {
+        const msg = (err as Error).message;
+        console.error("[/api/messages/send] manychat send error:", msg);
+        await adminClient
+          .from("messages")
+          .update({ status: "failed", error_message: msg })
+          .eq("id", savedMsg!.id);
+        return NextResponse.json({ error: msg }, { status: 502 });
+      }
+    }
 
     try {
       const messaging = getMessagingProvider();
