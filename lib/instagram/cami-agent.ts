@@ -7,6 +7,7 @@ import { composeSystemPrompt } from "@/lib/agents/compose-prompt";
 import { scoreConversation } from "@/lib/leads/scoring-agent";
 import { upsertLead } from "@/lib/leads/upsert-lead";
 import { sendInstagramMessage, pauseInstagramBot, clearPostContextFlag, ManyChatError } from "./manychat";
+import { sendHandoffEmail } from "@/lib/notifications/handoff";
 
 const MODEL = "claude-sonnet-4-5";
 const FALLBACK_MODEL = "claude-haiku-4-5-20251001";
@@ -433,6 +434,32 @@ export async function processCamiConversation(conversationId: string): Promise<v
         .update({ automation_paused: true, paused_reason: "derived_to_human" })
         .eq("id", conversationId);
       await sendSupervisorEmail(nombre, igUsername);
+
+      // ISSUE 1 — mail al operador con resumen del chat. Deferred con after()
+      // para no demorar la respuesta principal. Anti-spam interno: si el
+      // mismo chat fue notificado hace <60 min, skip silencioso.
+      after(async () => {
+        try {
+          const result = await sendHandoffEmail(
+            {
+              id: tenant.id,
+              name: tenant.name,
+              handoff_notification_email: tenant.handoff_notification_email,
+              handoff_notifications_enabled: tenant.handoff_notifications_enabled,
+            },
+            {
+              id: conversationId,
+              contact_name: conversation.contact_name,
+              contact_phone: conversation.contact_phone,
+              channel: conversation.channel,
+              last_handoff_email_at: conversation.last_handoff_email_at,
+            },
+          );
+          console.log(`[cami] handoff mail: ${result.sent ? "sent" : `skipped (${result.reason})`}`);
+        } catch (e) {
+          console.error("[cami] handoff mail unexpected error:", (e as Error).message);
+        }
+      });
     }
   }
 

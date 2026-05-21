@@ -48,6 +48,8 @@ interface TenantSettings {
 
   // Notificaciones
   lead_notification_email: string | null;
+  handoff_notification_email: string | null;
+  handoff_notifications_enabled: boolean;
 
   // Config estructurada del agente (migración 017)
   agent_tone: AgentTone | null;
@@ -84,6 +86,8 @@ interface FormState {
 
   // Notificaciones
   lead_notification_email: string;
+  handoff_notification_email: string;
+  handoff_notifications_enabled: boolean;
 
   // Integraciones
   admin_phone: string;
@@ -106,6 +110,8 @@ const EMPTY_FORM: FormState = {
   ads_context_general: "",
   ads_context_keywords: "",
   lead_notification_email: "",
+  handoff_notification_email: "",
+  handoff_notifications_enabled: true,
   admin_phone: "",
   admin_system_prompt: "",
 };
@@ -785,7 +791,7 @@ function NotificationsTab({
   return (
     <>
       <SectionHeader
-        title="Mail de notificación"
+        title="Leads calificados"
         body="Cuando un lead supera el score de 60 puntos, te llega un mail con los datos extraídos por el agente."
       />
 
@@ -800,6 +806,34 @@ function NotificationsTab({
           <p className="text-[11px] text-stone leading-relaxed">
             Si lo dejás vacío no se envían notificaciones — los leads igual se guardan
             en la base.
+          </p>
+        </Field>
+      </Card>
+
+      <SectionHeader
+        title="Derivación a humano"
+        body="Cuando el agente decide derivar un chat (cliente quiere cerrar compra, reclamo, consulta técnica), te llega un mail con un resumen del estado de la conversación."
+      />
+
+      <Card>
+        <Field>
+          <Checkbox
+            checked={form.handoff_notifications_enabled}
+            onChange={(c) => onChange("handoff_notifications_enabled", c)}
+            label="Notificar por mail al derivar chat"
+          />
+        </Field>
+
+        <Field label="Email para chats derivados" icon={<Mail size={13} strokeWidth={1.8} />}>
+          <Input
+            type="email"
+            value={form.handoff_notification_email}
+            onChange={(v) => onChange("handoff_notification_email", v)}
+            placeholder="vos@tuempresa.com"
+          />
+          <p className="text-[11px] text-stone leading-relaxed">
+            Puede ser el mismo o distinto al de leads. Anti-spam: máximo un mail por
+            hora por chat. Si lo dejás vacío no se envían aunque el toggle esté activo.
           </p>
         </Field>
       </Card>
@@ -1146,6 +1180,8 @@ function tenantToForm(t: TenantSettings): FormState {
     ads_context_general: t.ads_context_general ?? "",
     ads_context_keywords: t.ads_context_keywords ?? "",
     lead_notification_email: t.lead_notification_email ?? "",
+    handoff_notification_email: t.handoff_notification_email ?? "",
+    handoff_notifications_enabled: t.handoff_notifications_enabled ?? true,
     admin_phone: t.admin_phone ?? "",
     admin_system_prompt: t.admin_system_prompt ?? "",
   };
@@ -1177,6 +1213,8 @@ function formToPatch(f: FormState) {
 
     // Notificaciones
     lead_notification_email: orEmpty(f.lead_notification_email),
+    handoff_notification_email: orEmpty(f.handoff_notification_email),
+    handoff_notifications_enabled: f.handoff_notifications_enabled,
 
     // Integraciones
     admin_phone: orEmpty(f.admin_phone),

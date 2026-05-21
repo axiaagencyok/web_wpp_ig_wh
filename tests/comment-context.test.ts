@@ -38,6 +38,8 @@ const TENANT: Tenant = {
   lead_notification_email: null,
   lead_scoring_prompt: null,
   lead_reset_after_days: 3,
+  handoff_notification_email: null,
+  handoff_notifications_enabled: true,
   meli_agent_system_prompt: null,
   meli_auto_answer: false,
   meli_enabled: false,

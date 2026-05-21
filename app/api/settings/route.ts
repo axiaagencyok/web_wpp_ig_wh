@@ -28,6 +28,13 @@ const patchSchema = z.object({
   lead_notification_email:     z.string().max(200).nullable().optional()
                                    .transform((v) => (typeof v === "string" && v.trim() === "" ? null : v)),
 
+  // Handoff a humano (migración 021) — mismo patrón defensivo que
+  // lead_notification_email: longitud + nullable, sin gate de formato
+  // estricto del lado server. El front valida email format con type="email".
+  handoff_notification_email:    z.string().max(200).nullable().optional()
+                                   .transform((v) => (typeof v === "string" && v.trim() === "" ? null : v)),
+  handoff_notifications_enabled: z.boolean().optional(),
+
   // Config estructurada del agente (migración 017)
   agent_tone:                  z.enum(["cercano_casual", "profesional", "argentino_divertido", "neutro_formal"]).nullable().optional(),
   agent_orthography:           z.array(z.enum(["voseo_argentino", "sin_emojis", "emojis_moderados"])).optional(),
@@ -77,6 +84,8 @@ export async function GET() {
           "google_sheet_range",
           "agent_enabled",
           "lead_notification_email",
+          "handoff_notification_email",
+          "handoff_notifications_enabled",
           "agent_tone",
           "agent_orthography",
           "agent_active_offer",
