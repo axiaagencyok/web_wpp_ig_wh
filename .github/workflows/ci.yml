@@ -25,11 +25,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
-    # Toda la app vive bajo /agentewpp dentro del repo.
-    defaults:
-      run:
-        working-directory: agentewpp
-
     env:
       # Fakes que solo permiten al código inicializar. Los módulos que
       # validan env en init (lib/supabase, twilio, whisper) usan estos
@@ -55,6 +50,11 @@ jobs:
       RESEND_API_KEY: re_test_dummy
       SUPERVISOR_EMAIL: ci@test.example.com
       INSTAGRAM_TENANT_ID: 00000000-0000-0000-0000-000000000001
+      ELEVENLABS_API_KEY: ci-test-elevenlabs
+      ELEVENLABS_VOICE_ID: ci-test-voice
+      CRON_SECRET: ci-test-cron
+      MELI_CLIENT_ID: ci-test-meli-id
+      NEXT_PUBLIC_APP_URL: https://ci.test
       NODE_OPTIONS: --max-old-space-size=4096
 
     steps:
@@ -65,7 +65,7 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: agentewpp/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
         run: npm ci

@@ -184,6 +184,15 @@ export async function processCamiConversation(conversationId: string): Promise<v
   const isAdClick = customFields.ad_click === true;
   const isPostComment = customFields.post_comment === true;
   const rawPostContext = typeof customFields.post_context === "string" ? customFields.post_context : "";
+  // contexto_comentario: PERSISTENTE — el operador lo carga manualmente en
+  // ManyChat por publicación. A diferencia de los flags one-shot
+  // (story_reply / ad_click / post_comment), este se inyecta en CADA turno
+  // mientras esté presente. Mantiene a Cami consciente del post en el que
+  // el cliente comentó originalmente.
+  const contextoComentario =
+    typeof customFields.contexto_comentario === "string"
+      ? customFields.contexto_comentario.trim()
+      : "";
 
   // Stories fields
   const storyGeneral = tenant?.stories_context_general?.trim();
@@ -248,6 +257,7 @@ export async function processCamiConversation(conversationId: string): Promise<v
     storiesContext: storyContextBlock || undefined,
     adsContext: adsContextBlock || undefined,
     postContext: postContextBlock || undefined,
+    commentContext: contextoComentario || undefined,
   });
 
   const anyContext = hasStoryContext || hasAdsContext || hasPostContext;
