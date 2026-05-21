@@ -1,0 +1,80 @@
+name: CI
+
+# Gates de PR: tsc + tests + build. Cualquier fallo bloquea el merge si
+# branch protection está configurado contra este check (ver docs/CI.md).
+#
+# Se dispara también en push a la default branch para mantener el badge
+# verde / rojo y disparar el smoke post-deploy (workflow separado).
+
+on:
+  pull_request:
+    branches: [feature/crm-admin, main]
+  push:
+    branches: [feature/crm-admin, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: typecheck + test + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # Toda la app vive bajo /agentewpp dentro del repo.
+    defaults:
+      run:
+        working-directory: agentewpp
+
+    env:
+      # Fakes que solo permiten al código inicializar. Los módulos que
+      # validan env en init (lib/supabase, twilio, whisper) usan estos
+      # valores; los tests mockean las llamadas reales así no hay request
+      # a APIs externas en CI. Si querés correr tests contra una DB real
+      # de CI, sobreescribí estos con secrets en GitHub:
+      #   CI_SUPABASE_URL, CI_SUPABASE_ANON_KEY, CI_SUPABASE_SERVICE_ROLE_KEY.
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.CI_SUPABASE_URL || 'https://ci.test.supabase.co' }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.CI_SUPABASE_ANON_KEY || 'eyJ.test.anon' }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CI_SUPABASE_SERVICE_ROLE_KEY || 'eyJ.test.service' }}
+      ANTHROPIC_API_KEY: sk-ant-test
+      OPENAI_API_KEY: sk-test-openai
+      TWILIO_ACCOUNT_SID: AC00000000000000000000000000000000
+      TWILIO_AUTH_TOKEN: test-twilio-token
+      TWILIO_SKIP_VALIDATION: 'true'
+      MANYCHAT_API_KEY: test-manychat
+      INTERNAL_WORKER_SECRET: test-worker-secret
+      GOOGLE_SERVICE_ACCOUNT_EMAIL: ci@test.iam.gserviceaccount.com
+      GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: |
+        -----BEGIN PRIVATE KEY-----
+        TEST
+        -----END PRIVATE KEY-----
+      RESEND_API_KEY: re_test_dummy
+      SUPERVISOR_EMAIL: ci@test.example.com
+      INSTAGRAM_TENANT_ID: 00000000-0000-0000-0000-000000000001
+      NODE_OPTIONS: --max-old-space-size=4096
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: agentewpp/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm run test:run
+
+      - name: Build
+        run: npm run build

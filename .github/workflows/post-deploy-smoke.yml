@@ -1,0 +1,123 @@
+name: Post-deploy smoke
+
+# Health check post-deploy a producción.
+# - Se dispara en push a la default branch (Vercel auto-deploya desde ahí).
+# - Espera ~3 min al deploy.
+# - Curlea https://${PROD_DOMAIN}/api/health.
+# - Si /api/health NO devuelve 200 OK → ejecuta `vercel rollback` y manda
+#   email a fran@fenoma.agency via Resend.
+#
+# Setup requerido en GitHub Secrets (ver docs/CI.md):
+#   PROD_DOMAIN          — ej. panel.fenoma.agency
+#   VERCEL_TOKEN         — personal/team token con permiso deploy
+#   VERCEL_ORG_ID        — slug o id del team de Vercel
+#   VERCEL_PROJECT_ID    — id del proyecto en Vercel
+#   RESEND_API_KEY_PROD  — para mandar la notificación de rollback
+
+on:
+  push:
+    branches: [feature/crm-admin, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: Health check + rollback on fail
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: ${{ vars.SMOKE_DISABLED != 'true' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for Vercel deploy (~3 min)
+        run: |
+          echo "Esperando 180s a que Vercel termine el deploy del commit ${GITHUB_SHA::12}…"
+          sleep 180
+
+      - name: Health check
+        id: health
+        continue-on-error: true
+        env:
+          PROD_DOMAIN: ${{ secrets.PROD_DOMAIN }}
+        run: |
+          if [ -z "$PROD_DOMAIN" ]; then
+            echo "::warning::PROD_DOMAIN secret no está seteado; smoke skip"
+            echo "status=skipped" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          http_code=$(curl -sS -o /tmp/health.json -w '%{http_code}' "https://${PROD_DOMAIN}/api/health" || echo "000")
+          echo "HTTP $http_code"
+          cat /tmp/health.json || true
+          if [ "$http_code" = "200" ]; then
+            echo "status=ok" >> $GITHUB_OUTPUT
+          else
+            echo "status=fail" >> $GITHUB_OUTPUT
+            echo "http_code=$http_code" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Setup Node (for vercel CLI)
+        if: steps.health.outcome == 'failure'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Rollback via Vercel CLI
+        id: rollback
+        if: steps.health.outcome == 'failure'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
+            echo "::warning::Faltan secrets de Vercel; no se puede ejecutar rollback automático"
+            echo "rolled_back=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          # `vercel rollback` sin arg apunta al deploy previo al último que
+          # promovió a producción. --yes para skip confirm interactivo.
+          npx vercel@latest rollback --yes --token "$VERCEL_TOKEN" || {
+            echo "::error::vercel rollback falló"
+            echo "rolled_back=false" >> $GITHUB_OUTPUT
+            exit 1
+          }
+          echo "rolled_back=true" >> $GITHUB_OUTPUT
+
+      - name: Notify on rollback via Resend
+        if: steps.health.outcome == 'failure'
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY_PROD }}
+          ROLLED_BACK: ${{ steps.rollback.outputs.rolled_back }}
+          HTTP_CODE: ${{ steps.health.outputs.http_code }}
+        run: |
+          if [ -z "$RESEND_API_KEY" ]; then
+            echo "::warning::RESEND_API_KEY_PROD no seteado; no se manda mail"
+            exit 0
+          fi
+
+          subject="🚨 Fenoma — Health check post-deploy FALLÓ"
+          if [ "$ROLLED_BACK" = "true" ]; then
+            subject="🚨 Fenoma — Rollback automático ejecutado"
+          fi
+
+          body=$(cat <<EOF
+          {
+            "from": "leads@fenoma.agency",
+            "to": "fran@fenoma.agency",
+            "subject": "${subject}",
+            "html": "<p>El health check de <code>/api/health</code> devolvió HTTP ${HTTP_CODE} después del deploy del commit <code>${GITHUB_SHA}</code>.</p><p><strong>Rollback automático:</strong> ${ROLLED_BACK}</p><p>Workflow: <a href='${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}'>${GITHUB_RUN_ID}</a></p>"
+          }
+          EOF
+          )
+
+          curl -sS -X POST https://api.resend.com/emails \
+            -H "Authorization: Bearer $RESEND_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$body"
