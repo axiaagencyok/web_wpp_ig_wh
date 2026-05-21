@@ -9,6 +9,9 @@ import { generateAudio } from "@/lib/tts/elevenlabs";
 import { uploadAudio } from "@/lib/tts/storage";
 import type { Conversation, Message, Tenant } from "@/types/database.types";
 
+// Ventana de historial. Mínimo 30 mensajes (15 turnos completos). El cliente
+// NO debe sentir amnesia — preferimos gastar tokens antes que olvidar lo que
+// dijo 2 turnos atrás.
 const MAX_HISTORY_MESSAGES = 30;
 const MODEL = "claude-sonnet-4-5";
 const FALLBACK_MODEL = "claude-haiku-4-5-20251001";

@@ -12,7 +12,10 @@ import { sendHandoffEmail } from "@/lib/notifications/handoff";
 const MODEL = "claude-sonnet-4-5";
 const FALLBACK_MODEL = "claude-haiku-4-5-20251001";
 const RETRY_DELAYS_MS = [1_000, 3_000, 9_000];
-const MAX_HISTORY_TURNS = 6; // 3 turnos = 6 mensajes (user + assistant)
+// Ventana de historial. El cliente NO debe sentir amnesia — preferimos gastar
+// tokens antes que olvidar lo que dijo 2 turnos atrás. 30 mensajes ≈ 15 turnos
+// completos (user + assistant). Sube a más si hace falta.
+const MAX_HISTORY_MESSAGES = 30;
 
 function requireEnv(name: string): string {
   const v = process.env[name];
@@ -299,7 +302,7 @@ export async function processCamiConversation(conversationId: string): Promise<v
     .select("direction, body, created_at")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
-    .limit(MAX_HISTORY_TURNS);
+    .limit(MAX_HISTORY_MESSAGES);
   if (triggerCutoff) {
     historyQuery = historyQuery.gte("created_at", triggerCutoff);
   }
