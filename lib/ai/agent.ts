@@ -2,13 +2,15 @@ import Anthropic from "@anthropic-ai/sdk";
 import { adminClient } from "@/lib/supabase/admin";
 import { composeSystemPrompt } from "@/lib/agents/compose-prompt";
 import { getMessagingProvider } from "@/lib/messaging";
-import { getTenantCatalog } from "./business-context";
 import { buildImageContentBlock, buildAudioText, transcribePendingAudio } from "./media-handler";
-import { TOOL_DEFINITIONS, type DeriveToHumanInput, type GetCatalogInput } from "./tools";
+import { TOOL_DEFINITIONS, type DeriveToHumanInput } from "./tools";
 import { generateAudio } from "@/lib/tts/elevenlabs";
 import { uploadAudio } from "@/lib/tts/storage";
 import type { Conversation, Message, Tenant } from "@/types/database.types";
 
+// Ventana de historial. Mínimo 30 mensajes (15 turnos completos). El cliente
+// NO debe sentir amnesia — preferimos gastar tokens antes que olvidar lo que
+// dijo 2 turnos atrás.
 const MAX_HISTORY_MESSAGES = 30;
 const MODEL = "claude-sonnet-4-5";
 const FALLBACK_MODEL = "claude-haiku-4-5-20251001";
@@ -109,12 +111,6 @@ async function executeTool(
   toolInput: Record<string, unknown>,
   ctx: ToolContext
 ): Promise<{ result: string; sideEffect?: "derived" }> {
-  if (toolName === "get_catalog") {
-    const { category } = toolInput as GetCatalogInput;
-    const catalog = await getTenantCatalog(ctx.tenant, category);
-    return { result: catalog };
-  }
-
   if (toolName === "derive_to_human") {
     const { reason } = toolInput as unknown as DeriveToHumanInput;
 
@@ -186,10 +182,11 @@ export async function runAgent(
 
   const loopMessages: Anthropic.MessageParam[] = [...messageHistory];
 
-  // Mati (agente WhatsApp, ex-Lucas) — el system prompt sale del compose-prompt
-  // que mergea la plantilla base con la config estructurada del tenant. El
-  // catálogo se trae bajo demanda con la tool get_catalog, no se pre-inyecta.
-  const tenantSystemPrompt = composeSystemPrompt(tenant, "mati_wpp");
+  // Mati (agente WhatsApp) — el system prompt sale de compose-prompt:
+  // catálogo (resuelto desde catalog_source) + prompt del tenant guardado en
+  // tenants.wpp_agent_system_prompt + regla anti-alucinación global. Ya no
+  // existe tool de catálogo: se inyecta como prefijo.
+  const tenantSystemPrompt = await composeSystemPrompt(tenant, "wpp");
 
   for (let iteration = 0; iteration < 10; iteration++) {
     const response = await callClaude({
@@ -333,9 +330,12 @@ export async function processConversation(
   // Ejecutar agente
   const result = await runAgent(conversation, tenant);
 
-  // No responder con audio si el agente consultó el catálogo (lista larga = mejor texto)
-  const usedCatalog = result.toolCallsLog.some((t) => t.name === "get_catalog");
-  const respondWithAudio = clientSentAudio && !usedCatalog;
+  // Heurística: si la respuesta es muy larga (típicamente cuando el agente
+  // recita el catálogo), preferimos texto. Antes detectábamos esto via la
+  // tool `get_catalog`; ahora el catálogo se inyecta como prefijo, así que
+  // medimos directo el largo del texto generado.
+  const responseLooksLikeList = !!result.responseText && result.responseText.length > 500;
+  const respondWithAudio = clientSentAudio && !responseLooksLikeList;
 
   const latencyMs = Date.now() - startMs;
 

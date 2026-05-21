@@ -1,31 +1,9 @@
 import type Anthropic from "@anthropic-ai/sdk";
 
+// `get_catalog` quedó deprecada en la migración 023: el catálogo se inyecta
+// como prefijo del system prompt directamente desde compose-prompt. Mati ya
+// no necesita una tool para consultarlo. Mantenemos sólo `derive_to_human`.
 export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
-  {
-    name: "get_catalog",
-    description:
-      "Catálogo de productos del negocio con precios actualizados en tiempo real. " +
-      "Llamá esta tool SIEMPRE antes de responder sobre productos, precios o disponibilidad " +
-      "— nunca respondas de memoria.\n\n" +
-      "USO DEL PARÁMETRO category:\n" +
-      "- Si el cliente pregunta por una categoría específica (celulares, lavarropas, TV, etc.), " +
-      "pasá el término de búsqueda en `category` para obtener solo esos productos.\n" +
-      "- Si la consulta es general o no sabés la categoría, no incluyas `category` " +
-      "y recibirás el catálogo completo.\n" +
-      "- Ejemplos: category='celular', category='lavarropas', category='TV', category='heladera'.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        category: {
-          type: "string",
-          description:
-            "Filtro opcional de categoría (substring, case-insensitive). " +
-            "Ej: 'celular', 'lavarropas', 'TV', 'heladera', 'freezer'.",
-        },
-      },
-      required: [],
-    },
-  },
   {
     name: "derive_to_human",
     description:
@@ -46,11 +24,7 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   },
 ];
 
-export type ToolName = "get_catalog" | "derive_to_human";
-
-export interface GetCatalogInput {
-  category?: string;
-}
+export type ToolName = "derive_to_human";
 
 export interface DeriveToHumanInput {
   reason: string;

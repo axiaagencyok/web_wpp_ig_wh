@@ -35,14 +35,13 @@ const patchSchema = z.object({
                                    .transform((v) => (typeof v === "string" && v.trim() === "" ? null : v)),
   handoff_notifications_enabled: z.boolean().optional(),
 
-  // Config estructurada del agente (migración 017)
-  agent_tone:                  z.enum(["cercano_casual", "profesional", "argentino_divertido", "neutro_formal"]).nullable().optional(),
-  agent_orthography:           z.array(z.enum(["voseo_argentino", "sin_emojis", "emojis_moderados"])).optional(),
-  agent_active_offer:          z.string().max(500).nullable().optional(),
-  agent_business_hours:        z.string().max(200).nullable().optional(),
-  agent_business_hours_alert:  z.boolean().optional(),
-  agent_temporary_closures:    z.string().max(500).nullable().optional(),
-  agent_special_instructions:  z.string().max(500).nullable().optional(),
+  // Prompts independientes por canal (migración 023). Cada uno es el system
+  // prompt COMPLETO del agente para ese canal — fuente única de verdad.
+  // Límite 20k chars: deja headroom para prompts largos sin permitir abusos.
+  ig_agent_system_prompt:   z.string().max(20000).nullable().optional(),
+  wpp_agent_system_prompt:  z.string().max(20000).nullable().optional(),
+  meli_agent_system_prompt: z.string().max(20000).nullable().optional(),
+  agent_name:               z.string().max(60).nullable().optional(),
 
   // Channel feature flags (migración 019)
   instagram_enabled:           z.boolean().optional(),
@@ -86,13 +85,10 @@ export async function GET() {
           "lead_notification_email",
           "handoff_notification_email",
           "handoff_notifications_enabled",
-          "agent_tone",
-          "agent_orthography",
-          "agent_active_offer",
-          "agent_business_hours",
-          "agent_business_hours_alert",
-          "agent_temporary_closures",
-          "agent_special_instructions",
+          "agent_name",
+          "ig_agent_system_prompt",
+          "wpp_agent_system_prompt",
+          "meli_agent_system_prompt",
           "instagram_enabled",
           "whatsapp_enabled",
         ].join(", ")

@@ -8,7 +8,6 @@ import type { Tenant } from "@/types/database.types";
 import type {
   AdminActionPayload,
   UpdatePricePayload,
-  UpdateAgentConfigPayload,
   UpdateContextPayload,
 } from "./parse-intent";
 
@@ -24,9 +23,6 @@ export async function executeAdminAction(
   try {
     if (action.action_type === "update_price") {
       return await execUpdatePrice(action.payload, tenant);
-    }
-    if (action.action_type === "update_agent_config") {
-      return await execUpdateAgentConfig(action.payload, tenant);
     }
     if (action.action_type === "update_context") {
       return await execUpdateContext(action.payload, tenant);
@@ -57,38 +53,6 @@ async function execUpdatePrice(
     message: `Listo, cambié "${payload.column}" de "${result.previousValue || "(vacío)"}" a "${result.newValue}" en la fila "${payload.sheet_match}".`,
   };
 }
-
-async function execUpdateAgentConfig(
-  payload: UpdateAgentConfigPayload,
-  tenant:  Tenant,
-): Promise<ExecuteResult> {
-  // El cliente Supabase tipa Update por columna, así que armamos un objeto
-  // específico por field en vez de un Record genérico.
-  const value = payload.new_value;
-  const update =
-    payload.field === "agent_active_offer"         ? { agent_active_offer: value } :
-    payload.field === "agent_business_hours"       ? { agent_business_hours: value } :
-    payload.field === "agent_temporary_closures"   ? { agent_temporary_closures: value } :
-                                                     { agent_special_instructions: value };
-
-  const { error } = await adminClient.from("tenants").update(update).eq("id", tenant.id);
-  if (error) return { ok: false, message: `Error al guardar: ${error.message}` };
-
-  const label = AGENT_CONFIG_LABELS[payload.field];
-  return {
-    ok: true,
-    message: payload.new_value
-      ? `Listo, actualicé ${label}: "${payload.new_value}".`
-      : `Listo, dejé vacío ${label}.`,
-  };
-}
-
-const AGENT_CONFIG_LABELS: Record<UpdateAgentConfigPayload["field"], string> = {
-  agent_active_offer:         "la oferta vigente",
-  agent_business_hours:       "el horario de atención",
-  agent_temporary_closures:   "los cierres temporales",
-  agent_special_instructions: "las instrucciones especiales",
-};
 
 async function execUpdateContext(
   payload: UpdateContextPayload,

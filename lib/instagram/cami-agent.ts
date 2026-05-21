@@ -2,7 +2,6 @@ import Anthropic from "@anthropic-ai/sdk";
 import nodemailer from "nodemailer";
 import { after } from "next/server";
 import { adminClient } from "@/lib/supabase/admin";
-import { getCatalogText } from "@/lib/catalog/catalog-source";
 import { composeSystemPrompt } from "@/lib/agents/compose-prompt";
 import { scoreConversation } from "@/lib/leads/scoring-agent";
 import { upsertLead } from "@/lib/leads/upsert-lead";
@@ -12,7 +11,10 @@ import { sendHandoffEmail } from "@/lib/notifications/handoff";
 const MODEL = "claude-sonnet-4-5";
 const FALLBACK_MODEL = "claude-haiku-4-5-20251001";
 const RETRY_DELAYS_MS = [1_000, 3_000, 9_000];
-const MAX_HISTORY_TURNS = 6; // 3 turnos = 6 mensajes (user + assistant)
+// Ventana de historial. El cliente NO debe sentir amnesia — preferimos gastar
+// tokens antes que olvidar lo que dijo 2 turnos atrás. 30 mensajes ≈ 15 turnos
+// completos (user + assistant). Sube a más si hace falta.
+const MAX_HISTORY_MESSAGES = 30;
 
 function requireEnv(name: string): string {
   const v = process.env[name];
@@ -20,37 +22,6 @@ function requireEnv(name: string): string {
     throw new Error(`[cami] Variable de entorno requerida no definida: ${name}`);
   }
   return v;
-}
-
-function buildToolDefinitions(tenantName: string): Anthropic.Tool[] {
-  return [
-    {
-      name: "get_catalogo",
-      description:
-        `Catálogo de productos de ${tenantName} con precios actualizados en tiempo real.\n\n` +
-        "CUÁNDO usar busqueda (RECOMENDADO para consultas específicas):\n" +
-        "- El cliente pregunta por un producto o categoría específica → busqueda='licuadora'\n" +
-        "- El cliente pregunta por una marca → busqueda='samsung'\n" +
-        "- El cliente pregunta por un modelo → busqueda='galaxy a15'\n" +
-        "Usá el nombre en SINGULAR y sin adjetivos. Ejemplos: 'licuadora' no 'licuadoras baratas'.\n\n" +
-        "CUÁNDO NO usar busqueda:\n" +
-        "- El cliente pregunta qué tienen en general o pide ver todo el catálogo.\n\n" +
-        "Si la búsqueda no encuentra resultados exactos, recibirás el catálogo completo con una advertencia. " +
-        "En ese caso REVISÁ TODA LA LISTA línea por línea antes de decir que no hay productos.",
-      input_schema: {
-        type: "object" as const,
-        properties: {
-          busqueda: {
-            type: "string",
-            description:
-              "Término a buscar en todas las columnas del catálogo (tipo, marca, producto, descripción). " +
-              "Usar singular sin adjetivos. Ej: 'licuadora', 'heladera', 'samsung', 'galaxy a15'.",
-          },
-        },
-        required: [],
-      },
-    },
-  ];
 }
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -178,8 +149,6 @@ export async function processCamiConversation(conversationId: string): Promise<v
     throw new Error(`Tenant ${conversation.tenant_id} no tiene name configurado en DB.`);
   }
 
-  const toolDefinitions = buildToolDefinitions(tenantName);
-
   const customFields = (conversation.custom_fields as Record<string, unknown> | null) ?? {};
   const isStoryReply = customFields.story_reply === true;
   const isAdClick = customFields.ad_click === true;
@@ -219,7 +188,7 @@ export async function processCamiConversation(conversationId: string): Promise<v
       `1. El cliente consulta por el/los producto(s) del contexto de arriba. Ese es el TEMA DE LA CONVERSACIÓN AHORA.\n` +
       `2. Si en mensajes anteriores de esta conversación se mencionó otro producto distinto, OLVIDALO. Esa charla ya pasó. El cliente cambió de tema al responder la story.\n` +
       `3. Si el mensaje del cliente contiene una palabra clave del listado de arriba, esa palabra define exactamente cuál producto del contexto está consultando. Si no, usá el contexto general.\n` +
-      `4. Usá get_catalogo INMEDIATAMENTE con el producto/keyword del contexto para traer precio, stock y descripción reales. Nunca inventes datos.\n` +
+      `4. Buscá ese producto/keyword en el bloque CATÁLOGO inyectado al inicio del prompt y traé de ahí precio, stock y descripción reales. Nunca inventes datos.\n` +
       `5. Respondé pivoteando al producto del contexto. Ejemplo: si el contexto es 'air fryer' y el cliente pregunta 'cuánto sale?', la respuesta arranca con info de la air fryer, no del producto anterior.\n` +
       `================================================================`
     : "";
@@ -233,7 +202,7 @@ export async function processCamiConversation(conversationId: string): Promise<v
       `1. El cliente está consultando por el/los producto(s) del ad. NO sigas temas previos.\n` +
       `2. Si en mensajes anteriores se mencionó otro producto, OLVIDALO.\n` +
       `3. Si el mensaje contiene una palabra clave del listado, esa define el producto exacto.\n` +
-      `4. Usá get_catalogo INMEDIATAMENTE con el producto del contexto.\n` +
+      `4. Buscá ese producto en el bloque CATÁLOGO inyectado al inicio del prompt.\n` +
       `5. Respondé pivoteando al producto del ad.\n` +
       `================================================================`
     : "";
@@ -245,16 +214,16 @@ export async function processCamiConversation(conversationId: string): Promise<v
       `\n\nINSTRUCCIONES CRÍTICAS:\n` +
       `1. El cliente está consultando por el/los producto(s) del post. NO sigas temas previos.\n` +
       `2. Si en mensajes anteriores se mencionó otro producto, OLVIDALO.\n` +
-      `3. Usá get_catalogo INMEDIATAMENTE con el producto del contexto.\n` +
+      `3. Buscá ese producto en el bloque CATÁLOGO inyectado al inicio del prompt.\n` +
       `4. Respondé pivoteando al producto del post/reel.\n` +
       `================================================================`
     : "";
 
-  // System prompt vía compose-prompt: la plantilla base + la config
-  // estructurada del tenant + los bloques de contexto del turno actual.
-  // El catálogo no se preinyecta acá — Cami lo trae bajo demanda con la
-  // tool `get_catalogo`.
-  const fullSystemPrompt = composeSystemPrompt(tenant, "cami_ig", {
+  // System prompt via compose-prompt: catálogo + contexto del comentario IG
+  // (prefijos) → prompt del tenant (fuente de verdad de la marca) → contextos
+  // del turno actual (stories / ads / post) → regla anti-alucinación global.
+  // El catálogo se pre-inyecta como prefijo — Cami ya no usa tool calling.
+  const fullSystemPrompt = await composeSystemPrompt(tenant, "ig", {
     storiesContext: storyContextBlock || undefined,
     adsContext: adsContextBlock || undefined,
     postContext: postContextBlock || undefined,
@@ -299,7 +268,7 @@ export async function processCamiConversation(conversationId: string): Promise<v
     .select("direction, body, created_at")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
-    .limit(MAX_HISTORY_TURNS);
+    .limit(MAX_HISTORY_MESSAGES);
   if (triggerCutoff) {
     historyQuery = historyQuery.gte("created_at", triggerCutoff);
   }
@@ -318,70 +287,32 @@ export async function processCamiConversation(conversationId: string): Promise<v
   const igUsername = (conversation.custom_fields as Record<string, string> | null)?.ig_username ?? subscriberId;
   const nombre = conversation.contact_name ?? igUsername;
 
-  // Tool loop
   // On story reply, ad click, or post comment turns, skip prior history so the
   // model can't anchor to a previous product. The auto-clear above ensures only
   // this one turn is affected.
-  const loopMessages: Anthropic.MessageParam[] = (hasStoryContext || hasAdsContext || hasPostContext)
+  const turnMessages: Anthropic.MessageParam[] = (hasStoryContext || hasAdsContext || hasPostContext)
     ? [history[history.length - 1]]
     : [...history];
-  let finalText: string | null = null;
-  let promptTokens = 0;
-  let completionTokens = 0;
-  let usedModel = MODEL;
-  const toolCallsLog: string[] = [];
+
   const startMs = Date.now();
+  const response = await callClaude({
+    max_tokens: 1024,
+    system: fullSystemPrompt,
+    messages: turnMessages,
+  });
 
-  for (let i = 0; i < 10; i++) {
-    const response = await callClaude({
-      max_tokens: 1024,
-      system: fullSystemPrompt,
-      tools: toolDefinitions,
-      messages: loopMessages,
-    });
+  const promptTokens = response.usage.input_tokens;
+  const completionTokens = response.usage.output_tokens;
+  const usedModel = response.model ?? MODEL;
 
-    promptTokens += response.usage.input_tokens;
-    completionTokens += response.usage.output_tokens;
-    usedModel = response.model ?? usedModel;
-
-    if (response.stop_reason === "end_turn") {
-      const textBlock = response.content
+  const finalText = response.stop_reason === "end_turn"
+    ? response.content
         .filter((b): b is Anthropic.TextBlock => b.type === "text")
-        .pop();
-      finalText = textBlock?.text ?? null;
-      break;
-    }
+        .pop()?.text ?? null
+    : null;
 
-    if (response.stop_reason === "tool_use") {
-      loopMessages.push({ role: "assistant", content: response.content });
-
-      const toolResults: Anthropic.ToolResultBlockParam[] = [];
-
-      for (const block of response.content) {
-        if (block.type !== "tool_use") continue;
-        toolCallsLog.push(block.name);
-
-        let result: string;
-        if (block.name === "get_catalogo") {
-          try {
-            const { busqueda } = block.input as { busqueda?: string };
-            result = await getCatalogText(tenant, { search: busqueda });
-          } catch (e) {
-            result = `Error obteniendo catálogo: ${(e as Error).message}`;
-          }
-        } else {
-          result = `Tool desconocida: ${block.name}`;
-        }
-
-        toolResults.push({ type: "tool_result", tool_use_id: block.id, content: result });
-      }
-
-      loopMessages.push({ role: "user", content: toolResults });
-      continue;
-    }
-
+  if (response.stop_reason !== "end_turn") {
     console.warn(`[cami] Unexpected stop_reason: ${response.stop_reason}`);
-    break;
   }
 
   const latencyMs = Date.now() - startMs;
@@ -394,7 +325,7 @@ export async function processCamiConversation(conversationId: string): Promise<v
     completion_tokens: completionTokens,
     model: usedModel,
     latency_ms: latencyMs,
-    tool_calls: toolCallsLog as unknown as import("@/types/database.types").Json,
+    tool_calls: [] as unknown as import("@/types/database.types").Json,
   });
 
   if (!finalText) {
@@ -487,7 +418,7 @@ export async function processCamiConversation(conversationId: string): Promise<v
       .eq("status", "queued");
 
     console.log(
-      `[cami] ✓ Sent to @${igUsername} | ${promptTokens + completionTokens} tokens | ${latencyMs}ms | tools: ${toolCallsLog.join(", ") || "none"}`
+      `[cami] ✓ Sent to @${igUsername} | ${promptTokens + completionTokens} tokens | ${latencyMs}ms`
     );
   } catch (e) {
     console.error("[cami] Error sending via ManyChat:", (e as Error).message);

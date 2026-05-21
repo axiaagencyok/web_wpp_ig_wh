@@ -12,27 +12,17 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ── Tipos del contrato ──────────────────────────────────────────────────────
 
-export type AdminActionType = "update_price" | "update_agent_config" | "update_context";
+// `update_agent_config` quedó deprecado en la migración 023 (los campos
+// estructurados se eliminaron — el admin ahora edita el prompt completo
+// desde el panel /settings > Prompts del agente). Acá conservamos
+// update_price y update_context.
+export type AdminActionType = "update_price" | "update_context";
 
 export interface UpdatePricePayload {
   sheet_match: string;   // texto para identificar la fila (substring case-insensitive)
   column:      string;   // nombre exacto de la columna
   new_value:   string;   // nuevo valor
   current_value?: string; // valor actual leído del sheet (informativo)
-}
-
-// Sólo permitimos campos estructurados conocidos para evitar que el modelo
-// invente columnas. update_agent_prompt full-text lo sigue cubriendo el
-// admin-agent existente; este flujo es para los campos discretos.
-export type AgentConfigField =
-  | "agent_active_offer"
-  | "agent_business_hours"
-  | "agent_temporary_closures"
-  | "agent_special_instructions";
-
-export interface UpdateAgentConfigPayload {
-  field:     AgentConfigField;
-  new_value: string | null; // null = limpiar el campo
 }
 
 export type ContextField =
@@ -48,7 +38,6 @@ export interface UpdateContextPayload {
 
 export type AdminActionPayload =
   | { action_type: "update_price";        payload: UpdatePricePayload }
-  | { action_type: "update_agent_config"; payload: UpdateAgentConfigPayload }
   | { action_type: "update_context";      payload: UpdateContextPayload };
 
 export type ParsedIntent =
@@ -67,7 +56,7 @@ export interface ParseContext {
 
 // ── Schema-as-prompt ────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `Sos un parser de intents para un asistente administrativo de WhatsApp. El dueño del negocio te manda un mensaje en español pidiendo modificar la configuración del agente o el catálogo. Tu único trabajo es devolver UN JSON con la propuesta de cambio. NO ejecutás nada — sólo proponés.
+const SYSTEM_PROMPT = `Sos un parser de intents para un asistente administrativo de WhatsApp. El dueño del negocio te manda un mensaje en español pidiendo modificar el catálogo o el contexto dinámico. Tu único trabajo es devolver UN JSON con la propuesta de cambio. NO ejecutás nada — sólo proponés.
 
 Devolvé JSON con UNA de estas formas:
 
@@ -82,22 +71,7 @@ Devolvé JSON con UNA de estas formas:
   "human_summary": "<oración en español resumiendo la propuesta>"
 }
 
-2) Cambiar un campo estructurado de la config del agente:
-{
-  "action_type": "update_agent_config",
-  "payload": {
-    "field":     "agent_active_offer" | "agent_business_hours" | "agent_temporary_closures" | "agent_special_instructions",
-    "new_value": "<texto nuevo, o null para limpiar el campo>"
-  },
-  "human_summary": "..."
-}
-
-   - agent_active_offer: oferta vigente que el agente menciona.
-   - agent_business_hours: horario de atención en texto libre.
-   - agent_temporary_closures: cierres temporales (vacaciones, feriados).
-   - agent_special_instructions: instrucciones libres adicionales.
-
-3) Cambiar contexto dinámico (stories / ads):
+2) Cambiar contexto dinámico (stories / ads):
 {
   "action_type": "update_context",
   "payload": {
@@ -109,9 +83,8 @@ Devolvé JSON con UNA de estas formas:
 
 REGLAS:
 - "human_summary" siempre en español natural, sin tecnicismos. Ej: "subir el precio de SPC Click 4mm a 42000".
-- Si el usuario quiere borrar/sacar una oferta o cierre, usá action_type=update_agent_config con new_value=null.
 - Para update_context NUNCA incluyas precios ni stock — eso siempre viene del catálogo.
-- Si el mensaje no encaja en ninguno de los 3 tipos (consultas, saludos, dudas, pedidos no soportados) devolvé:
+- Si el mensaje no encaja en ninguno de los 2 tipos (consultas, saludos, dudas, pedidos no soportados) devolvé:
   { "ok": false, "reason": "<por qué no se pudo parsear, en español, corto>" }
 - NO inventes columnas que no estén en la lista de headers del catálogo.
 - Sólo respondés JSON crudo, sin markdown, sin comentarios.`;
@@ -135,10 +108,6 @@ function buildContextBlock(ctx: ParseContext): string {
   // qué pide cambiar el usuario cuando dice "sacar la oferta" etc.
   const t = ctx.tenant;
   const current = [
-    ["agent_active_offer",         t.agent_active_offer],
-    ["agent_business_hours",       t.agent_business_hours],
-    ["agent_temporary_closures",   t.agent_temporary_closures],
-    ["agent_special_instructions", t.agent_special_instructions],
     ["stories_context_general",    t.stories_context_general],
     ["stories_context_keywords",   t.stories_context_keywords],
     ["ads_context_general",        t.ads_context_general],
@@ -246,26 +215,6 @@ function validatePayload(
       action: {
         action_type: "update_price",
         payload: { sheet_match, column, new_value: String(new_value) },
-      },
-    };
-  }
-
-  if (action_type === "update_agent_config") {
-    const { field, new_value } = payload as Partial<UpdateAgentConfigPayload>;
-    const allowed: AgentConfigField[] = [
-      "agent_active_offer",
-      "agent_business_hours",
-      "agent_temporary_closures",
-      "agent_special_instructions",
-    ];
-    if (!field || !allowed.includes(field as AgentConfigField)) {
-      return { ok: false, reason: `Campo de config no soportado: "${field}".` };
-    }
-    return {
-      ok: true,
-      action: {
-        action_type: "update_agent_config",
-        payload: { field: field as AgentConfigField, new_value: new_value ?? null },
       },
     };
   }

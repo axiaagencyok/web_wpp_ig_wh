@@ -35,14 +35,16 @@ beforeEach(() => {
 });
 
 // Payload con TODOS los campos editables. Replica formToPatch() del front.
+//
+// Migración 023 eliminó los campos estructurados del agente
+// (agent_tone, agent_orthography, agent_active_offer, etc.) y agregó los
+// prompts independientes por canal (ig_agent_system_prompt,
+// wpp_agent_system_prompt, meli_agent_system_prompt) + agent_name.
 const FULL_PATCH_BODY = {
-  agent_tone: "argentino_divertido" as const,
-  agent_orthography: ["voseo_argentino", "emojis_moderados"],
-  agent_active_offer: "20% OFF en SPC hasta el viernes",
-  agent_business_hours: "Lun a vie 9 a 19",
-  agent_business_hours_alert: true,
-  agent_temporary_closures: null as string | null,
-  agent_special_instructions: "No prometer entrega antes de 7 días.",
+  agent_name: "Cami",
+  ig_agent_system_prompt: "Sos Cami, asesora virtual de White Diamond...",
+  wpp_agent_system_prompt: "Sos Mati de White Diamond por WhatsApp...",
+  meli_agent_system_prompt: "Sos Matías, asesor de MELI...",
   catalog_source: "sheets" as const,
   google_sheet_id: "1abcDEF",
   google_sheet_range: "Lista de Precios",
@@ -51,6 +53,8 @@ const FULL_PATCH_BODY = {
   ads_context_general: null,
   ads_context_keywords: null,
   lead_notification_email: "leads@whitediamond.com",
+  handoff_notification_email: null,
+  handoff_notifications_enabled: true,
   admin_phone: "whatsapp:+5491111111111",
   admin_system_prompt: null,
 };
@@ -75,15 +79,15 @@ describe("PATCH /api/settings", () => {
     );
     expect(updateCall).toBeDefined();
     const payload = updateCall!.payload as Record<string, unknown>;
-    expect(payload.agent_active_offer).toBe(FULL_PATCH_BODY.agent_active_offer);
-    expect(payload.agent_business_hours_alert).toBe(true);
-    expect(payload.agent_orthography).toEqual(FULL_PATCH_BODY.agent_orthography);
+    expect(payload.ig_agent_system_prompt).toBe(FULL_PATCH_BODY.ig_agent_system_prompt);
+    expect(payload.wpp_agent_system_prompt).toBe(FULL_PATCH_BODY.wpp_agent_system_prompt);
+    expect(payload.agent_name).toBe("Cami");
   });
 
   it("rechaza 400 con un campo que NO está en el schema (defensa contra typos)", async () => {
     const { PATCH } = await import("@/app/api/settings/route");
     const res = await PATCH(
-      buildPatchRequest({ ...FULL_PATCH_BODY, agent_orthography: ["VALOR_INEXISTENTE"] }) as never,
+      buildPatchRequest({ ...FULL_PATCH_BODY, catalog_source: "INVALIDO" }) as never,
     );
     expect(res.status).toBe(400);
   });
