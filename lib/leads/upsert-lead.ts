@@ -43,10 +43,6 @@ export interface UpsertLeadParams {
  * Nunca tira excepción al caller — errores se logean y la función devuelve null.
  */
 
-export interface SendAnswerResult {
-  // (no usado — placeholder para mantener typecheck si alguien importa este file)
-}
-
 export async function upsertLead(params: UpsertLeadParams): Promise<Lead | null> {
   const { tenant, conversation, scoring } = params;
 
@@ -171,26 +167,72 @@ export async function upsertLead(params: UpsertLeadParams): Promise<Lead | null>
   // En el caso de reset, notificado_at se nulleó arriba → si el nuevo score
   // >= 60, se notifica de nuevo (caso real: cliente recurrente que califica
   // alto otra vez tras venir cerrado).
-  if (lead && lead.lead_score !== null && lead.lead_score >= NOTIFICATION_THRESHOLD && !lead.notificado_at) {
-    const now = new Date().toISOString();
-    const { data: stamped, error: stampErr } = await adminClient
-      .from("Leads")
-      .update({ notificado_at: now })
-      .eq("id", lead.id)
-      // Re-chequear notificado_at sigue NULL acá previene una doble notificación
-      // si dos turnos concurrentes pasan el umbral al mismo tiempo.
-      .is("notificado_at", null)
-      .select("*")
-      .single();
+  if (!lead) {
+    return lead;
+  }
 
-    if (stampErr) {
-      console.error(`[upsertLead] stamp notificado_at error lead ${lead.id}:`, stampErr.message);
-    } else if (stamped) {
-      lead = stamped;
-      void sendLeadNotification(lead, tenant).catch((e) =>
-        console.error(`[upsertLead] sendLeadNotification rejected for lead ${lead?.id}:`, (e as Error).message)
+  const score = lead.lead_score;
+  const alreadyNotified = !!lead.notificado_at;
+
+  if (score === null || score < NOTIFICATION_THRESHOLD) {
+    console.log(
+      `[upsertLead] skip notify lead=${lead.id} score=${score} threshold=${NOTIFICATION_THRESHOLD}`
+    );
+    return lead;
+  }
+  if (alreadyNotified) {
+    console.log(
+      `[upsertLead] skip notify lead=${lead.id} score=${score} already_notified_at=${lead.notificado_at}`
+    );
+    return lead;
+  }
+
+  console.log(
+    `[upsertLead] enter notify block lead=${lead.id} tenant=${tenant.id} score=${score} email=${tenant.lead_notification_email ?? "<null>"}`
+  );
+
+  // Stamp notificado_at primero — el filtro .is("notificado_at", null) bloquea
+  // doble notificación bajo concurrencia.
+  const now = new Date().toISOString();
+  const { data: stamped, error: stampErr } = await adminClient
+    .from("Leads")
+    .update({ notificado_at: now })
+    .eq("id", lead.id)
+    .is("notificado_at", null)
+    .select("*")
+    .maybeSingle();
+
+  if (stampErr) {
+    console.error(`[upsertLead] stamp notificado_at error lead=${lead.id}:`, stampErr.message);
+    return lead;
+  }
+  if (!stamped) {
+    console.log(
+      `[upsertLead] stamp no-op (otra ejecución concurrente ya notificó) lead=${lead.id}`
+    );
+    return lead;
+  }
+  lead = stamped;
+
+  // CRÍTICO: await — antes era `void sendLeadNotification(...)` y en Vercel
+  // la función serverless terminaba apenas resolvía la promesa registrada en
+  // `after()`, matando el HTTP a Resend antes de que se disparara. Awaiteando
+  // acá garantizamos que la promesa del scoringTask no se resuelva hasta que
+  // el mail efectivamente salga (o falle con error logueado).
+  try {
+    const result = await sendLeadNotification(lead, tenant);
+    if (result.sent) {
+      console.log(`[upsertLead] ✓ notificación enviada lead=${lead.id}`);
+    } else {
+      console.warn(
+        `[upsertLead] notificación NO enviada lead=${lead.id} reason=${result.reason ?? "?"}`
       );
     }
+  } catch (e) {
+    console.error(
+      `[upsertLead] sendLeadNotification threw lead=${lead.id}:`,
+      (e as Error).message
+    );
   }
 
   return lead;
