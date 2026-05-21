@@ -12,12 +12,20 @@ interface ManyChatPayload {
     ig_username: string;
     last_input_text: string;
     ig_last_interaction: string;
+    // Manual reply support: cuando un operador responde manualmente desde
+    // la app de Instagram (o desde ManyChat Live Chat), ManyChat puede
+    // dispararnos el webhook con un flow configurado, marcando
+    // `manual_reply: true` y poniendo el texto del operador en
+    // `last_output_text`. Ver docs/MANYCHAT-MANUAL-REPLIES.md para el
+    // setup del flow.
+    last_output_text?: string;
     custom_fields?: {
       producto_consultado?: string;
       story_reply?: boolean | string;
       ad_click?: boolean | string;
       post_comment?: boolean | string;
       post_context?: string;
+      manual_reply?: boolean | string;
     };
   };
 }
@@ -30,12 +38,19 @@ function parseAdClick(v: boolean | string | undefined): boolean {
   return v === true || v === "true" || v === "Yes";
 }
 
+function isManualReply(v: boolean | string | undefined): boolean {
+  return v === true || v === "true" || v === "Yes" || v === "1";
+}
+
 async function processIncoming(payload: ManyChatPayload): Promise<void> {
   const data = payload["full-data"];
   const manychatId = data.id;
   const nombre = data.first_name;
   const igUsername = data.ig_username;
-  const mensajeRaw = data.last_input_text ?? "";
+  const manualReply = isManualReply(data.custom_fields?.manual_reply);
+  const mensajeRaw = manualReply
+    ? (data.last_output_text ?? "")
+    : (data.last_input_text ?? "");
   const productoConsultado = data.custom_fields?.producto_consultado ?? null;
   const storyReply = isStoryReply(data.custom_fields?.story_reply);
   const adClick = parseAdClick(data.custom_fields?.ad_click);
@@ -60,20 +75,27 @@ async function processIncoming(payload: ManyChatPayload): Promise<void> {
     return;
   }
 
-  if (!tenant.agent_enabled) {
-    console.log(`[ig-webhook] Agent disabled for tenant ${tenantId}`);
-    return;
-  }
+  // agent_enabled gateaba ANTES el persistido del mensaje también — eso
+  // perdía el histórico de chats si el dueño apagaba el agente. Ahora el
+  // mensaje SIEMPRE se guarda; solo gate al enqueue del buffer (más abajo).
 
-  // Normalize message — process media if needed
+  // Normalize message — process media if needed. Las URLs de media solo
+  // aparecen en input del subscriber, no en respuestas de operador, así
+  // que skipeamos esta normalización para manual replies.
   let mensajeNormalizado: string | null = mensajeRaw;
 
-  if (isInstagramMediaUrl(mensajeRaw)) {
+  if (!manualReply && isInstagramMediaUrl(mensajeRaw)) {
     mensajeNormalizado = await processInstagramMediaUrl(mensajeRaw);
     if (!mensajeNormalizado) {
       // Unsupported media type — ignore silently
       return;
     }
+  }
+
+  // Sin texto no hay nada que persistir.
+  if (!mensajeNormalizado || !mensajeNormalizado.trim()) {
+    console.warn(`[ig-webhook] Empty message for @${igUsername} (manualReply=${manualReply}); skipping`);
+    return;
   }
 
   const contactPhone = `instagram:${manychatId}`;
@@ -132,18 +154,25 @@ async function processIncoming(payload: ManyChatPayload): Promise<void> {
     .update({ last_message_at: new Date().toISOString() })
     .eq("id", conversation.id);
 
-  // Save inbound message
+  // Save message. Si es respuesta manual del operador, va como outbound/human
+  // y NO disparamos a Cami (el operador ya respondió). Si es input del
+  // subscriber, va como inbound/contact y encolamos al buffer para que Cami
+  // responda (excepto que el chat esté pausado o el agente desactivado).
   await adminClient.from("messages").insert({
     conversation_id: conversation.id,
     tenant_id: tenantId,
-    direction: "inbound",
-    sender: "contact",
+    direction: manualReply ? "outbound" : "inbound",
+    sender: manualReply ? "human" : "contact",
     body: mensajeNormalizado,
-    status: "delivered",
+    status: manualReply ? "sent" : "delivered",
   });
 
-  // Enqueue in buffer unless paused
-  if (!conversation.automation_paused) {
+  // Enqueue buffer solo para inputs reales del subscriber, no para respuestas
+  // del operador. agent_enabled = false también skip-ea el buffer (pero
+  // el mensaje ya quedó guardado arriba — no se pierde el histórico).
+  const shouldQueue =
+    !manualReply && tenant.agent_enabled && !conversation.automation_paused;
+  if (shouldQueue) {
     await upsertBuffer(conversation.id, tenant.buffer_seconds);
   }
 
