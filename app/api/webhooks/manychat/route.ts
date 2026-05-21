@@ -26,6 +26,12 @@ interface ManyChatPayload {
       post_comment?: boolean | string;
       post_context?: string;
       manual_reply?: boolean | string;
+      // contexto_comentario: MANUAL — el operador lo carga en ManyChat
+      // por publicación con texto libre tipo "Comentó en post de SPC click,
+      // ya le ofrecimos info". A diferencia de post_context (auto-fill por
+      // flow), este NO se consume — persiste en custom_fields hasta que
+      // el operador lo cambie, y Cami lo inyecta en cada turno.
+      contexto_comentario?: string;
     };
   };
 }
@@ -56,6 +62,7 @@ async function processIncoming(payload: ManyChatPayload): Promise<void> {
   const adClick = parseAdClick(data.custom_fields?.ad_click);
   const postComment = parseAdClick(data.custom_fields?.post_comment);
   const postContext = data.custom_fields?.post_context ?? null;
+  const contextoComentario = data.custom_fields?.contexto_comentario?.trim() || null;
 
   // Find tenant configured for Instagram (env: INSTAGRAM_TENANT_ID)
   const tenantId = process.env.INSTAGRAM_TENANT_ID;
@@ -117,6 +124,10 @@ async function processIncoming(payload: ManyChatPayload): Promise<void> {
     ...(adClick ? { ad_click: true } : {}),
     ...(postComment ? { post_comment: true } : {}),
     ...(postContext ? { post_context: postContext } : {}),
+    // contexto_comentario persistente — solo sobreescribe si el webhook
+    // trae un valor nuevo no-vacío. Eso permite que ManyChat lo mande
+    // solo en el primer trigger y persista en mensajes siguientes.
+    ...(contextoComentario ? { contexto_comentario: contextoComentario } : {}),
   };
 
   // Upsert conversation

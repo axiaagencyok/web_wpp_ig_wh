@@ -31,8 +31,14 @@ export interface ComposeContext {
   storiesContext?: string;
   /** Bloque ya formateado de contexto de ads cuando el turno es ad_click. */
   adsContext?: string;
-  /** Bloque ya formateado de contexto de post-comment. */
+  /** Bloque ya formateado de contexto de post-comment (one-shot, hardcoded en ManyChat). */
   postContext?: string;
+  /**
+   * Contexto persistente del comentario IG — el operador lo carga
+   * manualmente en ManyChat por publicación. Se inyecta en CADA turno
+   * mientras esté presente, a diferencia de postContext que se consume.
+   */
+  commentContext?: string;
   /** Bloque adicional con datos del ítem MELI puntual (sólo MELI). */
   meliItem?: string;
 }
@@ -119,6 +125,24 @@ function renderDynamicContexts(ctx: ComposeContext): string {
   if (ctx.storiesContext?.trim()) blocks.push(ctx.storiesContext.trim());
   if (ctx.adsContext?.trim()) blocks.push(ctx.adsContext.trim());
   if (ctx.postContext?.trim()) blocks.push(ctx.postContext.trim());
+  if (ctx.commentContext?.trim()) {
+    blocks.push(
+      [
+        "═══════════════════════════════════════════════════════════════",
+        "CONTEXTO DEL COMENTARIO IG (PERSISTENTE)",
+        "═══════════════════════════════════════════════════════════════",
+        "El cliente vino comentando una publicación específica. El operador",
+        "cargó este contexto en ManyChat. Tenelo presente DURANTE TODA la",
+        "conversación, no solo en el primer turno:",
+        "",
+        ctx.commentContext.trim(),
+        "",
+        "Si el cliente da una respuesta corta tipo 'sí', 'cuánto sale?', etc.",
+        "asumí que sigue hablando del producto/tema indicado arriba — no le",
+        "preguntes de qué quiere info, ya lo sabés.",
+      ].join("\n"),
+    );
+  }
   if (ctx.meliItem?.trim()) blocks.push(ctx.meliItem.trim());
 
   if (ctx.catalog?.trim()) {
