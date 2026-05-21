@@ -68,11 +68,30 @@ export function composeSystemPrompt(
   const config = renderTenantConfig(tenant);
   const dynamic = renderDynamicContexts(ctx);
 
-  // Orden: base → identidad y reglas del cliente → contextos del turno actual.
-  // Los contextos dinámicos van al final porque pesan MÁS en la decisión del
-  // turno actual que las reglas estáticas.
-  return [base, config, dynamic].filter(Boolean).join("\n\n");
+  // Orden: base → identidad y reglas del cliente → contextos del turno actual
+  // → regla anti-alucinación global. La regla va al final para que pese más
+  // en la decisión del modelo y no quede pisada por instrucciones previas.
+  return [base, config, dynamic, ANTI_HALLUCINATION_SUFFIX].filter(Boolean).join("\n\n");
 }
+
+// ─── Suffix global — anti-alucinación (no editable por el cliente) ───────────
+
+/**
+ * Bloque fijo inyectado al FINAL de TODO system prompt — IG, WhatsApp, MELI.
+ *
+ * Motivo: ya vimos a Matías (GPI) ofrecer "pasarme precios" cuando no tenía
+ * precios en su catálogo PDF. El agente inventó una capacidad. Esta regla
+ * cierra ese tipo de alucinación de raíz.
+ */
+const ANTI_HALLUCINATION_SUFFIX = `═══════════════════════════════════════════════════════════════
+REGLA CRÍTICA ANTI-ALUCINACIÓN (no negociable)
+═══════════════════════════════════════════════════════════════
+
+Si una información NO está en tu catálogo o en este system prompt, NUNCA la inventes ni prometas pasarla.
+
+* Si falta un dato puntual, decí "Déjame consultarlo con el equipo y te paso después" o derivá a humano.
+* JAMÁS prometas mandar archivos, precios, fotos o data que no tenés explícitamente.
+* Si dudás de tener un dato, NO lo afirmes. Mejor pedí más info al cliente o derivá.`;
 
 // ─── Render: structured config ───────────────────────────────────────────────
 
