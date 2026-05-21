@@ -210,6 +210,60 @@ export async function clearContextoComentarioFlag(
 }
 
 /**
+ * Resets the `story_context` boolean custom field to `false` for a given
+ * subscriber.
+ *
+ * Mismo patrón que `clearStoryReplyFlag`: el campo en ManyChat es boolean
+ * one-shot — true cuando el DM vino como respuesta a una story. Una vez que
+ * el webhook lo leyó y persistió `from_story` en conversations, hay que
+ * resetearlo para que no contamine el próximo mensaje del subscriber.
+ *
+ * `story_context` NO es una columna de nuestra DB: vive como custom_field
+ * del subscriber EN MANYCHAT. Por eso borrar conversations en Supabase NO lo
+ * limpia — sólo la API de ManyChat puede.
+ *
+ * Ver docs/MANYCHAT-CONTEXT-CLEANUP.md para el racional completo.
+ */
+export async function clearStoryContextFlag(
+  subscriberId: string,
+  apiKey?: string | null,
+): Promise<void> {
+  let key: string;
+  try {
+    key = resolveKey(apiKey);
+  } catch {
+    console.error(
+      `[manychat-cleanup] no API key — cannot clear story_context for subscriber ${subscriberId}`,
+    );
+    return;
+  }
+
+  console.log(`[manychat-cleanup] start (story_context) subscriber=${subscriberId}`);
+
+  const res = await fetch(`${MANYCHAT_API_BASE}/fb/subscriber/setCustomFieldByName`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      subscriber_id: subscriberId,
+      field_name: "story_context",
+      field_value: false,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error(
+      `[manychat-cleanup] error (story_context) subscriber=${subscriberId} status=${res.status} body=${body.slice(0, 200)}`,
+    );
+    return;
+  }
+  console.log(`[manychat-cleanup] ok (story_context) subscriber=${subscriberId}`);
+}
+
+/**
  * Resets post_comment to false and post_context to "-" for a given subscriber.
  * Called fire-and-forget after processing a post/reel comment so the flags are
  * consumed only once and don't bleed into subsequent messages.

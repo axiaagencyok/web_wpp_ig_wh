@@ -7,6 +7,7 @@ import {
   clearAdClickFlag,
   clearPostContextFlag,
   clearContextoComentarioFlag,
+  clearStoryContextFlag,
 } from "@/lib/instagram/manychat";
 import type { Json } from "@/types/database.types";
 
@@ -37,6 +38,14 @@ export interface ManyChatPayload {
       // flow), este NO se consume — persiste en custom_fields hasta que
       // el operador lo cambie, y Cami lo inyecta en cada turno.
       contexto_comentario?: string;
+      // story_context: BOOLEAN one-shot que ManyChat setea en true cuando el
+      // DM viene como respuesta a una story. Lo leemos para marcar la
+      // conversación como originada en story (custom_fields.from_story).
+      // Después limpiamos el flag en ManyChat. El TEXTO del contexto NO
+      // viene acá — vive en tenants.stories_context_general (panel
+      // /settings > Contextos > Stories), que es lo que compose-prompt
+      // inyecta cuando from_story está activo.
+      story_context?: boolean | string;
     };
   };
 }
@@ -68,6 +77,10 @@ export async function processIncoming(payload: ManyChatPayload, tenantId: string
   const postComment = parseAdClick(data.custom_fields?.post_comment);
   const postContext = data.custom_fields?.post_context ?? null;
   const contextoComentario = data.custom_fields?.contexto_comentario?.trim() || null;
+  // story_context viene como boolean (true cuando es respuesta a story).
+  // ManyChat puede serializarlo como boolean o string según cómo esté
+  // configurado el custom_field — aceptamos ambos.
+  const storyContextFlag = isStoryReply(data.custom_fields?.story_context);
 
   if (!tenantId) {
     console.error("[ig-webhook] tenantId not provided");
@@ -131,6 +144,12 @@ export async function processIncoming(payload: ManyChatPayload, tenantId: string
     // trae un valor nuevo no-vacío. Eso permite que ManyChat lo mande
     // solo en el primer trigger y persista en mensajes siguientes.
     ...(contextoComentario ? { contexto_comentario: contextoComentario } : {}),
+    // from_story: marca PERSISTENTE de que la conversación arrancó como
+    // respuesta a una story de IG. Una vez seteada, compose-prompt inyecta
+    // el contexto de stories del tenant en cada turno mientras la
+    // conversación dure. El flag en ManyChat (story_context boolean) se
+    // limpia después de leerlo — el estado persistente vive acá.
+    ...(storyContextFlag ? { from_story: true } : {}),
   };
 
   // Upsert conversation
@@ -228,6 +247,21 @@ export async function processIncoming(payload: ManyChatPayload, tenantId: string
     } catch (e) {
       console.error(
         `[manychat-cleanup] uncaught error subscriber=${manychatId}:`,
+        (e as Error).message,
+      );
+    }
+  });
+
+  // Mismo racional para story_context — ver docs/MANYCHAT-CONTEXT-CLEANUP.md.
+  // El flag es boolean one-shot: el estado persistente (from_story) ya quedó
+  // en conversations.custom_fields arriba, así que en ManyChat lo reseteamos
+  // siempre para que no contamine el próximo subscriber.
+  after(async () => {
+    try {
+      await clearStoryContextFlag(manychatId, tenantKey);
+    } catch (e) {
+      console.error(
+        `[manychat-cleanup] uncaught error (story_context) subscriber=${manychatId}:`,
         (e as Error).message,
       );
     }

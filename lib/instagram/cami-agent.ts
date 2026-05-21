@@ -92,6 +92,23 @@ async function sendSupervisorEmail(nombre: string, igUsername: string): Promise<
   }
 }
 
+// ── Story context text builder ───────────────────────────────────────────────
+// Combina el contexto general + keywords cargados por el operador en
+// /settings > Contextos > Stories. Devuelve null si el operador no cargó
+// nada (el bloque persistente no se inyecta en ese caso).
+function buildStoryContextText(
+  general?: string | null,
+  keywords?: string | null,
+): string | undefined {
+  const g = general?.trim();
+  const k = keywords?.trim();
+  if (!g && !k) return undefined;
+  const parts: string[] = [];
+  if (g) parts.push(g);
+  if (k) parts.push(`Palabras clave: ${k}`);
+  return parts.join("\n");
+}
+
 // ── History builder ──────────────────────────────────────────────────────────
 
 function buildCamiHistory(
@@ -163,6 +180,10 @@ export async function processCamiConversation(conversationId: string): Promise<v
     typeof customFields.contexto_comentario === "string"
       ? customFields.contexto_comentario.trim()
       : "";
+  // from_story: marca PERSISTENTE seteada por el webhook cuando ManyChat
+  // marca el DM como respuesta a una story (custom_field story_context=true).
+  // El texto del contexto NO vive acá — vive en tenants.stories_context_*.
+  const fromStory = customFields.from_story === true;
 
   // Stories fields
   const storyGeneral = tenant?.stories_context_general?.trim();
@@ -228,6 +249,7 @@ export async function processCamiConversation(conversationId: string): Promise<v
     adsContext: adsContextBlock || undefined,
     postContext: postContextBlock || undefined,
     commentContext: contextoComentario || undefined,
+    storyContext: fromStory ? buildStoryContextText(storyGeneral, storyKeywords) : undefined,
   });
 
   const anyContext = hasStoryContext || hasAdsContext || hasPostContext;
