@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminClient } from "@/lib/supabase/admin";
 import { upsertBuffer } from "@/lib/ai/buffer";
 import { TwilioProvider } from "@/lib/messaging/twilio-provider";
-import { handleAdminMessagePRD } from "@/lib/admin/handle-admin-message";
+import { handleAdminMessagePRD, toE164 } from "@/lib/admin/handle-admin-message";
 
 async function parseFormBody(req: NextRequest): Promise<Record<string, string>> {
   const text = await req.text();
@@ -53,15 +53,19 @@ export async function POST(req: NextRequest) {
     console.error("[webhook] handleAdminMessagePRD failed:", err);
   }
 
-  // ── 2. Identificar tenant por número destino ────────────────────────────────
-  const { data: tenant } = await adminClient
-    .from("tenants")
-    .select("id, buffer_seconds, agent_enabled, admin_phone")
-    .eq("whatsapp_number", to)
-    .single();
-
+  // ── 2. Identificar tenant ───────────────────────────────────────────────────
+  // En el Twilio Sandbox todos los tenants comparten el mismo TO
+  // (whatsapp:+14155238886). Buscar tenant por `To` no funciona: caería en
+  // el mismo tenant para todo el tráfico (o en ninguno). Cruzamos primero
+  // por FROM contra tenant_admin_phones (PR D dejó esa tabla poblada con
+  // E.164 sin prefijo). Como fallback mantenemos el lookup por TO para
+  // tenants con número Twilio dedicado, donde clientes finales son los que
+  // escriben y no van a estar en tenant_admin_phones.
+  //
+  // Si nada matchea: 200 silencioso. No es un error, es ruido.
+  const tenant = await resolveTenant({ from, to });
   if (!tenant) {
-    console.error(`[webhook] No tenant for number: ${to}`);
+    console.warn(`[webhook] Mensaje sin tenant: from=${from} to=${to} — descartado`);
     return twimlOk();
   }
 
@@ -143,4 +147,42 @@ function twimlOk() {
     status: 200,
     headers: { "Content-Type": "text/xml" },
   });
+}
+
+interface ResolvedTenant {
+  id:              string;
+  buffer_seconds:  number;
+  agent_enabled:   boolean;
+  admin_phone:     string | null;
+}
+
+// Busca el tenant primero por FROM (cruce contra tenant_admin_phones), y si
+// no hay match, cae al lookup viejo por TO (whatsapp_number). Devuelve null
+// si ninguna lookup tiene resultado.
+async function resolveTenant(args: { from: string; to: string }): Promise<ResolvedTenant | null> {
+  const fromE164 = toE164(args.from);
+
+  const { data: adminRow } = await adminClient
+    .from("tenant_admin_phones")
+    .select("tenant_id")
+    .eq("phone_number", fromE164)
+    .eq("is_active", true)
+    .limit(1)
+    .maybeSingle();
+
+  if (adminRow?.tenant_id) {
+    const { data: t } = await adminClient
+      .from("tenants")
+      .select("id, buffer_seconds, agent_enabled, admin_phone")
+      .eq("id", adminRow.tenant_id)
+      .maybeSingle();
+    if (t) return t;
+  }
+
+  const { data: tenantByTo } = await adminClient
+    .from("tenants")
+    .select("id, buffer_seconds, agent_enabled, admin_phone")
+    .eq("whatsapp_number", args.to)
+    .maybeSingle();
+  return tenantByTo ?? null;
 }
