@@ -1,30 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Info } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ChatHeader } from "./ChatHeader";
 import { MessageBubble } from "./MessageBubble";
 import { MessageInput } from "./MessageInput";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Conversation, Message } from "@/types/database.types";
-
-// ManyChat no expone una API para listar mensajes históricos de un subscriber
-// (confirmado contra api.manychat.com/swagger: solo expone `last_input_text`).
-// Si el cliente borra o manda mensajes desde la app de Instagram fuera de un
-// trigger del bot, esos cambios no llegan al panel. Esta nota deja la
-// limitación explícita arriba del chat.
-function InstagramSyncNotice() {
-  return (
-    <div className="px-4 py-2 bg-cream-soft border-b border-line flex items-start gap-2 text-[11.5px] text-stone leading-snug">
-      <Info size={13} strokeWidth={1.8} className="flex-shrink-0 mt-0.5" aria-hidden="true" />
-      <span>
-        Solo se muestran mensajes procesados por el agente. Los mensajes manuales
-        enviados o borrados desde Instagram no se sincronizan acá.
-      </span>
-    </div>
-  );
-}
 
 interface Props {
   conversation: Conversation;
@@ -137,8 +119,6 @@ export function ChatWindow({ conversation, onConversationUpdate, onBack }: Props
         onConversationUpdate={handleContactUpdate}
         onBack={onBack}
       />
-
-      {conversation.channel === "instagram" && <InstagramSyncNotice />}
 
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto bg-cream-soft">

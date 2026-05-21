@@ -92,6 +92,28 @@ describe("POST /api/webhooks/manychat", () => {
     const res = await POST(req as never);
     expect(res.status).toBe(400);
   });
+
+  it("acepta payload con manual_reply=true y procesa last_output_text", async () => {
+    // Restablecemos el mock para verificar el flow de manual reply.
+    const { POST } = await import("@/app/api/webhooks/manychat/route");
+
+    const payload = {
+      "full-data": {
+        id: "manychat_77",
+        first_name: "Fran",
+        ig_username: "fran.test",
+        last_input_text: "",
+        last_output_text: "Listo, te paso el link de pago",
+        ig_last_interaction: new Date().toISOString(),
+        custom_fields: {
+          manual_reply: true,
+        },
+      },
+    };
+
+    const res = await POST(buildPost("https://test/api/webhooks/manychat", payload) as never);
+    expect(res.status).toBe(200);
+  });
 });
 
 describe("POST /api/webhooks/meli", () => {
