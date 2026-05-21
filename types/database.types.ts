@@ -35,6 +35,8 @@ export type Database = {
           lead_notification_email: string | null
           lead_scoring_prompt: string | null
           lead_reset_after_days: number | null
+          handoff_notification_email: string | null
+          handoff_notifications_enabled: boolean
           meli_agent_system_prompt: string | null
           meli_auto_answer: boolean
           meli_enabled: boolean
@@ -74,6 +76,8 @@ export type Database = {
           lead_notification_email?: string | null
           lead_scoring_prompt?: string | null
           lead_reset_after_days?: number | null
+          handoff_notification_email?: string | null
+          handoff_notifications_enabled?: boolean
           meli_agent_system_prompt?: string | null
           meli_auto_answer?: boolean
           meli_enabled?: boolean
@@ -113,6 +117,8 @@ export type Database = {
           lead_notification_email?: string | null
           lead_scoring_prompt?: string | null
           lead_reset_after_days?: number | null
+          handoff_notification_email?: string | null
+          handoff_notifications_enabled?: boolean
           meli_agent_system_prompt?: string | null
           meli_auto_answer?: boolean
           meli_enabled?: boolean
@@ -176,6 +182,7 @@ export type Database = {
           channel: 'whatsapp' | 'instagram'
           last_message_at: string
           last_context_trigger_at: string | null
+          last_handoff_email_at: string | null
           unread_count: number
           created_at: string
         }
@@ -196,6 +203,7 @@ export type Database = {
           channel?: 'whatsapp' | 'instagram'
           last_message_at?: string
           last_context_trigger_at?: string | null
+          last_handoff_email_at?: string | null
           unread_count?: number
           created_at?: string
         }
@@ -216,6 +224,7 @@ export type Database = {
           channel?: 'whatsapp' | 'instagram'
           last_message_at?: string
           last_context_trigger_at?: string | null
+          last_handoff_email_at?: string | null
           unread_count?: number
           created_at?: string
         }
