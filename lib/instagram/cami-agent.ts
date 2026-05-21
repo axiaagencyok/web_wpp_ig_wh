@@ -284,7 +284,12 @@ export async function processCamiConversation(conversationId: string): Promise<v
 
   // Extract ManyChat subscriber ID from contact_phone (format: instagram:SUBSCRIBER_ID)
   const subscriberId = conversation.contact_phone.replace("instagram:", "");
-  const igUsername = (conversation.custom_fields as Record<string, string> | null)?.ig_username ?? subscriberId;
+  // igUsernameRaw es el handle real de IG cargado por ManyChat en el webhook.
+  // Puede faltar; en ese caso `igUsername` cae al subscriberId numérico para
+  // tener algo loggeable. Para el mail de handoff sólo queremos el handle
+  // real (no el ID numérico), así que pasamos `igUsernameRaw` aparte.
+  const igUsernameRaw = (conversation.custom_fields as Record<string, string> | null)?.ig_username?.trim() || null;
+  const igUsername = igUsernameRaw ?? subscriberId;
   const nombre = conversation.contact_name ?? igUsername;
 
   // On story reply, ad click, or post comment turns, skip prior history so the
@@ -383,6 +388,7 @@ export async function processCamiConversation(conversationId: string): Promise<v
             contact_phone: conversation.contact_phone,
             channel: conversation.channel,
             last_handoff_email_at: conversation.last_handoff_email_at,
+            ig_username: igUsernameRaw,
           },
         );
         if (result.sent) {
