@@ -2,7 +2,12 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { adminClient } from "@/lib/supabase/admin";
 import { upsertBuffer } from "@/lib/ai/buffer";
 import { processInstagramMediaUrl, isInstagramMediaUrl } from "@/lib/instagram/media-processor";
-import { clearStoryReplyFlag, clearAdClickFlag, clearPostContextFlag } from "@/lib/instagram/manychat";
+import {
+  clearStoryReplyFlag,
+  clearAdClickFlag,
+  clearPostContextFlag,
+  clearContextoComentarioFlag,
+} from "@/lib/instagram/manychat";
 import type { Json } from "@/types/database.types";
 
 export interface ManyChatPayload {
@@ -207,6 +212,26 @@ export async function processIncoming(payload: ManyChatPayload, tenantId: string
       console.error("[ig-webhook] clearPostContextFlag error:", (e as Error).message)
     );
   }
+
+  // Reset `contexto_comentario` SIEMPRE — no solo cuando vino populado.
+  // Replica el nodo "HTTP Request2" del flow viejo de n8n: garantiza que
+  // el custom_field queda en "-" después de cada turno y no contamina el
+  // próximo. Ver docs/MANYCHAT-CONTEXT-CLEANUP.md.
+  //
+  // Usamos `after()` anidado en vez de fire-and-forget `void` para que la
+  // promesa quede registrada en el chain de waitUntil de Vercel — sino la
+  // función serverless puede terminar antes de que el HTTP a ManyChat se
+  // dispare. Misma lección que el bug del mail de leads.
+  after(async () => {
+    try {
+      await clearContextoComentarioFlag(manychatId, tenantKey);
+    } catch (e) {
+      console.error(
+        `[manychat-cleanup] uncaught error subscriber=${manychatId}:`,
+        (e as Error).message,
+      );
+    }
+  });
 
   console.log(
     `[ig-webhook] @${igUsername} (${manychatId}) → conv ${conversation.id}`

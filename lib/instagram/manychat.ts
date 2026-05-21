@@ -155,6 +155,61 @@ export async function clearAdClickFlag(subscriberId: string, apiKey?: string | n
 }
 
 /**
+ * Resets the `contexto_comentario` custom field to "-" for a given subscriber.
+ *
+ * A diferencia de los otros clear*Flag (story / ad / post_comment), este se
+ * llama SIEMPRE — no solo cuando había contexto. Replica el nodo
+ * "HTTP Request2" del workflow viejo de n8n ("Leads Qualifier" /
+ * iY8lXquuEE7F6HuI) que se disparaba en cada mensaje entrante, garantizando
+ * que el custom_field queda en "-" después de cada turno y no contamina la
+ * próxima conversación.
+ *
+ * `contexto_comentario` NO es una columna de nuestra DB: vive como
+ * custom_field del subscriber EN MANYCHAT. Por eso borrar conversations en
+ * Supabase NO lo limpia — sólo la API de ManyChat puede.
+ *
+ * Ver docs/MANYCHAT-CONTEXT-CLEANUP.md para el racional completo.
+ */
+export async function clearContextoComentarioFlag(
+  subscriberId: string,
+  apiKey?: string | null,
+): Promise<void> {
+  let key: string;
+  try {
+    key = resolveKey(apiKey);
+  } catch {
+    console.error(
+      `[manychat-cleanup] no API key — cannot clear contexto_comentario for subscriber ${subscriberId}`,
+    );
+    return;
+  }
+
+  console.log(`[manychat-cleanup] start subscriber=${subscriberId}`);
+
+  const res = await fetch(`${MANYCHAT_API_BASE}/fb/subscriber/setCustomFieldByName`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      subscriber_id: subscriberId,
+      field_name: "contexto_comentario",
+      field_value: "-",
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error(
+      `[manychat-cleanup] error subscriber=${subscriberId} status=${res.status} body=${body.slice(0, 200)}`,
+    );
+    return;
+  }
+  console.log(`[manychat-cleanup] ok subscriber=${subscriberId}`);
+}
+
+/**
  * Resets post_comment to false and post_context to "-" for a given subscriber.
  * Called fire-and-forget after processing a post/reel comment so the flags are
  * consumed only once and don't bleed into subsequent messages.
