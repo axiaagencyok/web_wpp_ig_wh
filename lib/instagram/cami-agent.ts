@@ -335,65 +335,76 @@ export async function processCamiConversation(conversationId: string): Promise<v
 
   // Supervisor derivation detection.
   //
-  // Orden de operaciones: primero intentamos pausar el bot en ManyChat. Solo
-  // si el pause es "real" (o falla con un error grave que sugiere problema de
-  // infraestructura) marcamos la conversación como derivada y notificamos al
-  // supervisor. ManyChat devuelve 404 ocasionalmente para subscribers cuyo
-  // perfil quedó desincronizado del endpoint /instagram/subscriber/* — en ese
-  // caso preferimos seguir el flow normal de Cami antes que dejar al cliente
-  // sin respuesta.
+  // El handoff es el efecto crítico (pausar lógicamente del lado nuestro +
+  // notificar al supervisor). pauseBot contra ManyChat es un best-effort
+  // que NO debe abortar el handoff: ManyChat devuelve 404 ocasionalmente
+  // para subscribers desincronizados del endpoint /instagram/subscriber/*
+  // y eso no es razón para dejar al supervisor sin aviso.
   if (finalText.includes("Te derivaré con un supervisor.")) {
-    let shouldDerive = true;
     try {
       await pauseInstagramBot(subscriberId, tenant.manychat_api_key ?? null);
+      console.log(`[cami] pauseBot OK for subscriber ${subscriberId}`);
     } catch (err) {
       if (err instanceof ManyChatError && !err.isTransient) {
-        // 404 (y otros 4xx no-críticos): seguimos el flow normal. El cliente
-        // recibe la respuesta de Cami; no marcamos paused/derived.
         console.warn(
-          `[cami] pauseBot ${err.status} — skipping derivation, continuing normal flow for subscriber ${subscriberId}`
+          `[cami] pauseBot ${err.status} (no-grave) — handoff continúa (pausa lógica en DB) para subscriber ${subscriberId}`
         );
-        shouldDerive = false;
       } else {
-        // 5xx / 401 / 408 / 429 / red: lo tratamos como problema grave y
-        // derivamos igual (la pausa no quedó aplicada en ManyChat pero el
-        // supervisor puede tomar el chat manualmente).
-        console.error("[cami] pauseBot transient/grave error — deriving anyway:", err);
+        console.error(
+          `[cami] pauseBot transient/grave error — handoff continúa para subscriber ${subscriberId}:`,
+          err
+        );
       }
     }
 
-    if (shouldDerive) {
-      await adminClient
-        .from("conversations")
-        .update({ automation_paused: true, paused_reason: "derived_to_human" })
-        .eq("id", conversationId);
-      await sendSupervisorEmail(nombre, igUsername);
+    // Pausa lógica en DB — esto es lo que evita que Cami siga respondiendo
+    // en próximos turnos, independiente de si ManyChat pausó o no.
+    await adminClient
+      .from("conversations")
+      .update({ automation_paused: true, paused_reason: "derived_to_human" })
+      .eq("id", conversationId);
+    await sendSupervisorEmail(nombre, igUsername);
 
-      // ISSUE 1 — mail al operador con resumen del chat. Deferred con after()
-      // para no demorar la respuesta principal. Anti-spam interno: si el
-      // mismo chat fue notificado hace <60 min, skip silencioso.
-      after(async () => {
-        try {
-          const result = await sendHandoffEmail(
-            {
-              id: tenant.id,
-              name: tenant.name,
-              handoff_notification_email: tenant.handoff_notification_email,
-              handoff_notifications_enabled: tenant.handoff_notifications_enabled,
-            },
-            {
-              id: conversationId,
-              contact_name: conversation.contact_name,
-              contact_phone: conversation.contact_phone,
-              channel: conversation.channel,
-              last_handoff_email_at: conversation.last_handoff_email_at,
-            },
+    // Mail al operador con resumen del chat. Deferred con after() para no
+    // demorar la respuesta principal. Anti-spam interno: si el mismo chat
+    // fue notificado hace <60 min, skip silencioso.
+    const handoffMailTask = async () => {
+      try {
+        const result = await sendHandoffEmail(
+          {
+            id: tenant.id,
+            name: tenant.name,
+            handoff_notification_email: tenant.handoff_notification_email,
+            handoff_notifications_enabled: tenant.handoff_notifications_enabled,
+          },
+          {
+            id: conversationId,
+            contact_name: conversation.contact_name,
+            contact_phone: conversation.contact_phone,
+            channel: conversation.channel,
+            last_handoff_email_at: conversation.last_handoff_email_at,
+          },
+        );
+        if (result.sent) {
+          console.log(
+            `[handoff] triggered, mail sent to ${tenant.handoff_notification_email} for conv ${conversationId}`
           );
-          console.log(`[cami] handoff mail: ${result.sent ? "sent" : `skipped (${result.reason})`}`);
-        } catch (e) {
-          console.error("[cami] handoff mail unexpected error:", (e as Error).message);
+        } else if (result.reason === "no-email-configured") {
+          console.log(`[handoff] mail skipped, no email configured for tenant ${tenant.id}`);
+        } else {
+          console.log(`[handoff] mail skipped (${result.reason}) for conv ${conversationId}`);
         }
-      });
+      } catch (e) {
+        console.error("[handoff] unexpected error sending mail:", (e as Error).message);
+      }
+    };
+
+    try {
+      after(handoffMailTask);
+    } catch {
+      // after() requiere request context de Next. Fuera de él (tests,
+      // scripts) caemos a fire-and-forget.
+      void handoffMailTask();
     }
   }
 

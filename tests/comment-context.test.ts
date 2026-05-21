@@ -100,6 +100,31 @@ describe("composeSystemPrompt con commentContext", () => {
     expect(prompt).toContain("REGLA CRÍTICA ANTI-ALUCINACIÓN");
     expect(prompt.endsWith("Mejor pedí más info al cliente o derivá.")).toBe(true);
   });
+
+  it("el prompt del tenant es la BASE — aparece antes del catálogo y del comment context", async () => {
+    const prompt = await composeSystemPrompt(TENANT, "ig", {
+      catalog: "CATALOGO_FAKE_INLINE",
+      commentContext: "Comentó en post de SPC click",
+    });
+    const tenantIdx = prompt.indexOf("PROMPT DE PRUEBA DEL TENANT GPI");
+    const catalogIdx = prompt.indexOf("CATÁLOGO DE PRODUCTOS");
+    const commentIdx = prompt.indexOf("CONTEXTO DEL COMENTARIO IG");
+    expect(tenantIdx).toBeGreaterThanOrEqual(0);
+    expect(tenantIdx).toBeLessThan(catalogIdx);
+    expect(tenantIdx).toBeLessThan(commentIdx);
+  });
+
+  it("throws con mensaje explícito si tenant.ig_agent_system_prompt es null", async () => {
+    await expect(
+      composeSystemPrompt({ ...TENANT, ig_agent_system_prompt: null }, "ig", { catalog: "" })
+    ).rejects.toThrow(/no tiene prompt configurado para canal Instagram/);
+  });
+
+  it("throws si tenant.ig_agent_system_prompt está vacío o whitespace", async () => {
+    await expect(
+      composeSystemPrompt({ ...TENANT, ig_agent_system_prompt: "   " }, "ig", { catalog: "" })
+    ).rejects.toThrow(/no tiene prompt configurado para canal Instagram/);
+  });
 });
 
 // Silenciar warnings del cami logger durante el test
