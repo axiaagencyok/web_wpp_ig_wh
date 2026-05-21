@@ -22,6 +22,9 @@ const SCORE_BAR = (score: number | null | undefined): string => {
 export async function sendLeadNotification(lead: Lead, tenant: Pick<Tenant, "id" | "name" | "lead_notification_email">): Promise<{ sent: boolean; reason?: string }> {
   const to = tenant.lead_notification_email?.trim();
   if (!to) {
+    console.warn(
+      `[resend] skip lead=${lead.id} tenant=${tenant.id} — lead_notification_email no configurado`
+    );
     return { sent: false, reason: "lead_notification_email-null" };
   }
 
@@ -32,6 +35,10 @@ export async function sendLeadNotification(lead: Lead, tenant: Pick<Tenant, "id"
     );
     return { sent: false, reason: "no-api-key" };
   }
+
+  console.log(
+    `[resend] start lead=${lead.id} tenant=${tenant.id} to=${to} score=${lead.lead_score ?? "?"}`
+  );
 
   const from = process.env.RESEND_FROM?.trim() || DEFAULT_FROM;
   const resend = new Resend(apiKey);
@@ -63,7 +70,7 @@ export async function sendLeadNotification(lead: Lead, tenant: Pick<Tenant, "id"
   const html = `<pre style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;line-height:1.45;white-space:pre-wrap;">${escapeHtml(text)}</pre>`;
 
   try {
-    const { error } = await resend.emails.send({
+    const { data, error } = await resend.emails.send({
       from,
       to,
       subject,
@@ -74,6 +81,9 @@ export async function sendLeadNotification(lead: Lead, tenant: Pick<Tenant, "id"
       console.error(`[resend] Error enviando lead #${lead.id}:`, error);
       return { sent: false, reason: error.message ?? "resend-error" };
     }
+    console.log(
+      `[resend] ✓ sent lead=${lead.id} tenant=${tenant.id} to=${to} resend_id=${data?.id ?? "?"}`
+    );
     return { sent: true };
   } catch (e) {
     console.error(`[resend] Excepción enviando lead #${lead.id}:`, (e as Error).message);
