@@ -607,6 +607,88 @@ export type Database = {
           }
         ]
       }
+      tenant_admin_phones: {
+        Row: {
+          id: string
+          tenant_id: string
+          phone_number: string
+          admin_name: string | null
+          is_active: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          phone_number: string
+          admin_name?: string | null
+          is_active?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          phone_number?: string
+          admin_name?: string | null
+          is_active?: boolean
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_admin_phones_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      pending_admin_actions: {
+        Row: {
+          id: string
+          tenant_id: string
+          admin_phone: string
+          action_type: 'update_price' | 'update_agent_config' | 'update_context'
+          action_payload: Json
+          human_summary: string
+          status: 'pending' | 'confirmed' | 'rejected' | 'expired'
+          created_at: string
+          expires_at: string
+          resolved_at: string | null
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          admin_phone: string
+          action_type: 'update_price' | 'update_agent_config' | 'update_context'
+          action_payload: Json
+          human_summary: string
+          status?: 'pending' | 'confirmed' | 'rejected' | 'expired'
+          created_at?: string
+          expires_at?: string
+          resolved_at?: string | null
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          admin_phone?: string
+          action_type?: 'update_price' | 'update_agent_config' | 'update_context'
+          action_payload?: Json
+          human_summary?: string
+          status?: 'pending' | 'confirmed' | 'rejected' | 'expired'
+          created_at?: string
+          expires_at?: string
+          resolved_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pending_admin_actions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -638,3 +720,6 @@ export type MeliAccount = Database['public']['Tables']['meli_accounts']['Row']
 export type MeliAccountInsert = Database['public']['Tables']['meli_accounts']['Insert']
 export type MeliQuestion = Database['public']['Tables']['meli_questions']['Row']
 export type MeliQuestionInsert = Database['public']['Tables']['meli_questions']['Insert']
+export type TenantAdminPhone = Database['public']['Tables']['tenant_admin_phones']['Row']
+export type PendingAdminAction = Database['public']['Tables']['pending_admin_actions']['Row']
+export type PendingAdminActionInsert = Database['public']['Tables']['pending_admin_actions']['Insert']

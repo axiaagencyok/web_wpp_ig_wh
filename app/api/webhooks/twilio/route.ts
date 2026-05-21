@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminClient } from "@/lib/supabase/admin";
 import { upsertBuffer } from "@/lib/ai/buffer";
 import { TwilioProvider } from "@/lib/messaging/twilio-provider";
+import { handleAdminMessagePRD } from "@/lib/admin/handle-admin-message";
 
 async function parseFormBody(req: NextRequest): Promise<Record<string, string>> {
   const text = await req.text();
@@ -38,6 +39,19 @@ export async function POST(req: NextRequest) {
   const numMedia   = parseInt(body["NumMedia"] ?? "0", 10);
   const mediaUrl   = numMedia > 0 ? body["MediaUrl0"] ?? null : null;
   const mediaType  = numMedia > 0 ? body["MediaContentType0"] ?? null : null;
+
+  // ── 1.5. PR D — flujo admin estructurado con confirmación SI/NO ─────────────
+  // Si el From matchea un tenant_admin_phones activo, intentamos manejarlo
+  // acá (transcribir audio + parsear intent + propose/confirm). Si el parser
+  // no logra extraer un intent (ej. el admin pidió un reporte o stats),
+  // dejamos pasar al flujo legacy (admin-agent vía buffer) para preservar
+  // las capacidades de reporting existentes.
+  try {
+    const prd = await handleAdminMessagePRD({ from, to, body: msgBody, mediaUrl, mediaType });
+    if (prd.handled) return twimlOk();
+  } catch (err) {
+    console.error("[webhook] handleAdminMessagePRD failed:", err);
+  }
 
   // ── 2. Identificar tenant por número destino ────────────────────────────────
   const { data: tenant } = await adminClient
