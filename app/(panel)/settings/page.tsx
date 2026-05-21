@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import {
   Loader2,
   Save,
-  Sparkles,
   Phone,
   ShoppingBag,
   Mail,
@@ -20,9 +19,8 @@ import { cn } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type AgentTone = "cercano_casual" | "profesional" | "argentino_divertido" | "neutro_formal";
-type OrthographyRule = "voseo_argentino" | "sin_emojis" | "emojis_moderados";
 type CatalogSource = "sheets" | "pdf";
+type PromptChannel = "ig" | "wpp" | "meli";
 
 interface TenantSettings {
   id: string;
@@ -51,27 +49,22 @@ interface TenantSettings {
   handoff_notification_email: string | null;
   handoff_notifications_enabled: boolean;
 
-  // Config estructurada del agente (migración 017)
-  agent_tone: AgentTone | null;
-  agent_orthography: OrthographyRule[];
-  agent_active_offer: string | null;
-  agent_business_hours: string | null;
-  agent_business_hours_alert: boolean;
-  agent_temporary_closures: string | null;
-  agent_special_instructions: string | null;
+  // Prompts por canal (migración 023). Cada uno es el system prompt
+  // COMPLETO del agente para ese canal — fuente única de verdad.
+  agent_name: string | null;
+  ig_agent_system_prompt: string | null;
+  wpp_agent_system_prompt: string | null;
+  meli_agent_system_prompt: string | null;
 
   agent_enabled: boolean;
 }
 
 interface FormState {
-  // Agent
-  agent_tone: AgentTone | "";
-  agent_orthography: OrthographyRule[];
-  agent_active_offer: string;
-  agent_business_hours: string;
-  agent_business_hours_alert: boolean;
-  agent_temporary_closures: string;
-  agent_special_instructions: string;
+  // Prompts por canal
+  agent_name: string;
+  ig_agent_system_prompt: string;
+  wpp_agent_system_prompt: string;
+  meli_agent_system_prompt: string;
 
   // Catálogo
   catalog_source: CatalogSource;
@@ -95,13 +88,10 @@ interface FormState {
 }
 
 const EMPTY_FORM: FormState = {
-  agent_tone: "",
-  agent_orthography: [],
-  agent_active_offer: "",
-  agent_business_hours: "",
-  agent_business_hours_alert: false,
-  agent_temporary_closures: "",
-  agent_special_instructions: "",
+  agent_name: "",
+  ig_agent_system_prompt: "",
+  wpp_agent_system_prompt: "",
+  meli_agent_system_prompt: "",
   catalog_source: "sheets",
   google_sheet_id: "",
   google_sheet_range: "",
@@ -119,14 +109,14 @@ const EMPTY_FORM: FormState = {
 // ─── Tabs config ──────────────────────────────────────────────────────────────
 
 type TabKey =
-  | "agent"
+  | "prompts"
   | "catalog"
   | "contexts"
   | "notifications"
   | "integrations";
 
 const TABS: ReadonlyArray<SettingsTab<TabKey>> = [
-  { key: "agent",         label: "Configuración del agente" },
+  { key: "prompts",       label: "Prompts del agente" },
   { key: "catalog",       label: "Catálogo y productos" },
   { key: "contexts",      label: "Contextos" },
   { key: "notifications", label: "Notificaciones" },
@@ -147,7 +137,7 @@ export default function SettingsPage() {
   const [dirty, setDirty] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [tab, setTab] = useState<TabKey>("agent");
+  const [tab, setTab] = useState<TabKey>("prompts");
 
   useEffect(() => {
     fetch("/api/settings")
@@ -224,7 +214,7 @@ export default function SettingsPage() {
       <form onSubmit={handleSave} className="flex-1 min-h-0 flex flex-col">
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
-            {tab === "agent" && <AgentTab form={form} onChange={onChange} />}
+            {tab === "prompts" && <PromptsTab form={form} onChange={onChange} />}
             {tab === "catalog" && (
               <CatalogTab
                 form={form}
@@ -261,119 +251,92 @@ export default function SettingsPage() {
   );
 }
 
-// ─── Tab: Configuración del agente ───────────────────────────────────────────
+// ─── Tab: Prompts del agente ─────────────────────────────────────────────────
 
-function AgentTab({
+const CHANNEL_FIELD: Record<PromptChannel, "ig_agent_system_prompt" | "wpp_agent_system_prompt" | "meli_agent_system_prompt"> = {
+  ig:   "ig_agent_system_prompt",
+  wpp:  "wpp_agent_system_prompt",
+  meli: "meli_agent_system_prompt",
+};
+
+const CHANNEL_LABELS: Record<PromptChannel, string> = {
+  ig:   "Instagram",
+  wpp:  "WhatsApp",
+  meli: "Mercado Libre",
+};
+
+function PromptsTab({
   form,
   onChange,
 }: {
   form: FormState;
   onChange: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
 }) {
+  const [channel, setChannel] = useState<PromptChannel>("ig");
+  const field = CHANNEL_FIELD[channel];
+  const value = form[field];
+
   return (
     <>
       <SectionHeader
-        title="Personalidad y reglas"
-        body="Cómo te gusta que responda tu agente. Estos campos definen el tono, las normas de estilo, y la información de tu negocio que el agente menciona cuando hace falta."
+        title="Prompts del agente"
+        body="Editá el system prompt completo del agente para este canal. Es la fuente única de verdad. El catálogo y los contextos dinámicos se inyectan automáticamente — no los pongas acá."
       />
 
       <Card>
-        <Field label="Tono de habla">
-          <Select
-            value={form.agent_tone}
-            onChange={(v) => onChange("agent_tone", v as AgentTone | "")}
-            options={[
-              { value: "", label: "Sin definir" },
-              { value: "cercano_casual", label: "Cercano y casual" },
-              { value: "profesional", label: "Profesional" },
-              { value: "argentino_divertido", label: "Argentino divertido" },
-              { value: "neutro_formal", label: "Neutro formal" },
-            ]}
-          />
-        </Field>
-
-        <Field label="Reglas de ortografía y estilo" hint="Marcá las que apliquen.">
-          <CheckboxGroup
-            value={form.agent_orthography}
-            onChange={(v) => onChange("agent_orthography", v as OrthographyRule[])}
-            options={[
-              { value: "voseo_argentino", label: "Usar voseo argentino (vos / tenés / querés)" },
-              { value: "emojis_moderados", label: "Permitir emojis moderados" },
-              { value: "sin_emojis", label: "Sin emojis" },
-            ]}
-          />
-        </Field>
-      </Card>
-
-      <SectionHeader
-        title="Promociones y horarios"
-        body="Información que el agente puede usar en sus respuestas. Cuando no aplique, dejá el campo vacío."
-      />
-
-      <Card>
-        <Field
-          label="Oferta vigente"
-          hint='Una sola promoción activa. Ej. "20% OFF en SPC Click hasta el viernes".'
-        >
+        <Field label="Nombre del agente" hint='Cómo se presenta a los clientes. Ej. "Cami", "Matías".'>
           <Input
-            value={form.agent_active_offer}
-            onChange={(v) => onChange("agent_active_offer", v)}
-            placeholder='Ej. "20% OFF en SPC Click hasta el viernes"'
+            value={form.agent_name}
+            onChange={(v) => onChange("agent_name", v)}
+            placeholder="Cami"
           />
         </Field>
 
-        <Field label="Horario de atención">
-          <Input
-            value={form.agent_business_hours}
-            onChange={(v) => onChange("agent_business_hours", v)}
-            placeholder="Lun a vie de 9 a 18hs, sáb 9 a 13hs"
-          />
-        </Field>
-
-        <Field>
-          <Checkbox
-            checked={form.agent_business_hours_alert}
-            onChange={(c) => onChange("agent_business_hours_alert", c)}
-            label="Avisar al cliente cuando se contesta fuera de horario"
-          />
+        <Field label="Canal" hint="Cada canal tiene su prompt independiente.">
+          <div className="flex gap-2">
+            {(Object.keys(CHANNEL_LABELS) as PromptChannel[]).map((c) => {
+              const isActive = c === channel;
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setChannel(c)}
+                  className={cn(
+                    "px-4 py-2 rounded-full border text-[13px] font-medium transition-colors",
+                    isActive
+                      ? "border-accent bg-accent-soft text-ink"
+                      : "border-line bg-cream text-ink-soft hover:bg-cream-soft"
+                  )}
+                >
+                  {CHANNEL_LABELS[c]}
+                </button>
+              );
+            })}
+          </div>
         </Field>
 
         <Field
-          label="Cierres temporales"
-          hint='Solo si vas a estar cerrado un período específico. Ej. "Cerrado del 24/12 al 02/01".'
+          label={`Prompt — ${CHANNEL_LABELS[channel]}`}
+          hint={`${value.length} caracteres. Mínimo recomendado: ~500. Máximo aceptado por el servidor: 20.000.`}
         >
-          <Input
-            value={form.agent_temporary_closures}
-            onChange={(v) => onChange("agent_temporary_closures", v)}
-            placeholder='Ej. "Cerrado del 24/12 al 02/01"'
+          <textarea
+            value={value}
+            onChange={(e) => onChange(field, e.target.value)}
+            placeholder={`Escribí el system prompt del agente para ${CHANNEL_LABELS[channel]}…`}
+            className={cn(
+              inputBase,
+              "resize-y leading-relaxed font-mono text-[12.5px]"
+            )}
+            style={{ minHeight: 600 }}
           />
         </Field>
+
+        <p className="text-[11px] text-stone leading-relaxed">
+          El catálogo y el contexto del comentario IG se inyectan como prefijo
+          automáticamente — no los duplices acá. La regla anti-alucinación global
+          también se agrega como sufijo en cada turno.
+        </p>
       </Card>
-
-      <SectionHeader
-        title="Instrucciones libres"
-        body="Cualquier cosa que no entre en los campos de arriba. Pensá en restricciones específicas o casos de uso particulares."
-      />
-
-      <Card>
-        <Field
-          label="Instrucciones especiales"
-          hint={`${form.agent_special_instructions.length} / 500 caracteres`}
-        >
-          <Textarea
-            value={form.agent_special_instructions}
-            onChange={(v) => onChange("agent_special_instructions", v.slice(0, 500))}
-            rows={5}
-            placeholder='Ej. "No prometer plazos de entrega menores a 7 días hábiles. Si el cliente pregunta por accesorios para Air Fryer, sugerir la canasta extra que viene en combo."'
-          />
-        </Field>
-      </Card>
-
-      <FutureNotice>
-        Estos campos ya quedan guardados, pero todavía no se aplican automáticamente al
-        agente — sigue usando los prompts crudos. En la próxima actualización el agente
-        va a leer esta configuración estructurada en vez de los prompts.
-      </FutureNotice>
     </>
   );
 }
@@ -1068,36 +1031,6 @@ function Textarea({
   );
 }
 
-function Select({
-  value,
-  onChange,
-  options,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  options: ReadonlyArray<{ value: string; label: string }>;
-}) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={cn(inputBase, "appearance-none pr-9 bg-cream")}
-      style={{
-        backgroundImage:
-          "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%236E6878' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
-        backgroundRepeat: "no-repeat",
-        backgroundPosition: "right 14px center",
-      }}
-    >
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
-  );
-}
-
 function Checkbox({
   checked,
   onChange,
@@ -1125,53 +1058,14 @@ function Checkbox({
   );
 }
 
-function CheckboxGroup<T extends string>({
-  value,
-  onChange,
-  options,
-}: {
-  value: T[];
-  onChange: (v: T[]) => void;
-  options: ReadonlyArray<{ value: T; label: string }>;
-}) {
-  function toggle(v: T) {
-    if (value.includes(v)) onChange(value.filter((x) => x !== v));
-    else onChange([...value, v]);
-  }
-  return (
-    <div className="space-y-2">
-      {options.map((o) => (
-        <Checkbox
-          key={o.value}
-          checked={value.includes(o.value)}
-          onChange={() => toggle(o.value)}
-          label={o.label}
-        />
-      ))}
-    </div>
-  );
-}
-
-function FutureNotice({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-2xl border border-line bg-cream-soft px-4 py-3 flex items-start gap-3">
-      <Sparkles size={15} strokeWidth={1.8} className="text-accent mt-0.5 flex-shrink-0" />
-      <p className="text-[12px] text-ink-soft leading-relaxed">{children}</p>
-    </div>
-  );
-}
-
 // ─── State <-> server payload ─────────────────────────────────────────────────
 
 function tenantToForm(t: TenantSettings): FormState {
   return {
-    agent_tone: t.agent_tone ?? "",
-    agent_orthography: t.agent_orthography ?? [],
-    agent_active_offer: t.agent_active_offer ?? "",
-    agent_business_hours: t.agent_business_hours ?? "",
-    agent_business_hours_alert: t.agent_business_hours_alert ?? false,
-    agent_temporary_closures: t.agent_temporary_closures ?? "",
-    agent_special_instructions: t.agent_special_instructions ?? "",
+    agent_name: t.agent_name ?? "",
+    ig_agent_system_prompt: t.ig_agent_system_prompt ?? "",
+    wpp_agent_system_prompt: t.wpp_agent_system_prompt ?? "",
+    meli_agent_system_prompt: t.meli_agent_system_prompt ?? "",
     catalog_source: t.catalog_source ?? "sheets",
     google_sheet_id: t.google_sheet_id ?? "",
     google_sheet_range: t.google_sheet_range ?? "",
@@ -1191,14 +1085,11 @@ function tenantToForm(t: TenantSettings): FormState {
 function formToPatch(f: FormState) {
   const orEmpty = (v: string) => (v.trim() === "" ? null : v);
   return {
-    // Agent (017)
-    agent_tone: f.agent_tone === "" ? null : f.agent_tone,
-    agent_orthography: f.agent_orthography,
-    agent_active_offer: orEmpty(f.agent_active_offer),
-    agent_business_hours: orEmpty(f.agent_business_hours),
-    agent_business_hours_alert: f.agent_business_hours_alert,
-    agent_temporary_closures: orEmpty(f.agent_temporary_closures),
-    agent_special_instructions: orEmpty(f.agent_special_instructions),
+    // Prompts por canal (migración 023)
+    agent_name: orEmpty(f.agent_name),
+    ig_agent_system_prompt: orEmpty(f.ig_agent_system_prompt),
+    wpp_agent_system_prompt: orEmpty(f.wpp_agent_system_prompt),
+    meli_agent_system_prompt: orEmpty(f.meli_agent_system_prompt),
 
     // Catálogo
     catalog_source: f.catalog_source,

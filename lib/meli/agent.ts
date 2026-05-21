@@ -80,8 +80,10 @@ export async function generateAnswer(
     `─────────────────────────────────────────\n` +
     `${itemBlock}`;
 
-  const systemPrompt = composeSystemPrompt(tenant, "matias_meli", {
-    catalog: catalogText || undefined,
+  // Pasamos `catalog` explícito (incluso si es "" cuando falló la carga)
+  // para que compose-prompt NO intente re-fetchearlo de vuelta.
+  const systemPrompt = await composeSystemPrompt(tenant, "meli", {
+    catalog: catalogText,
     meliItem: meliItemBlock,
   });
 

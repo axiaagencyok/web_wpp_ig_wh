@@ -23,7 +23,10 @@ export type Database = {
           buffer_seconds: number
           admin_phone: string | null
           admin_system_prompt: string | null
+          agent_name: string | null
           ig_agent_system_prompt: string | null
+          wpp_agent_system_prompt: string | null
+          meli_agent_system_prompt: string | null
           stories_context_general: string | null
           stories_context_keywords: string | null
           ads_context_general: string | null
@@ -37,16 +40,8 @@ export type Database = {
           lead_reset_after_days: number | null
           handoff_notification_email: string | null
           handoff_notifications_enabled: boolean
-          meli_agent_system_prompt: string | null
           meli_auto_answer: boolean
           meli_enabled: boolean
-          agent_tone: string | null
-          agent_orthography: string[]
-          agent_active_offer: string | null
-          agent_business_hours: string | null
-          agent_business_hours_alert: boolean
-          agent_temporary_closures: string | null
-          agent_special_instructions: string | null
           instagram_enabled: boolean
           whatsapp_enabled: boolean
           manychat_api_key: string | null
@@ -65,7 +60,10 @@ export type Database = {
           buffer_seconds?: number
           admin_phone?: string | null
           admin_system_prompt?: string | null
+          agent_name?: string | null
           ig_agent_system_prompt?: string | null
+          wpp_agent_system_prompt?: string | null
+          meli_agent_system_prompt?: string | null
           stories_context_general?: string | null
           stories_context_keywords?: string | null
           ads_context_general?: string | null
@@ -79,16 +77,8 @@ export type Database = {
           lead_reset_after_days?: number | null
           handoff_notification_email?: string | null
           handoff_notifications_enabled?: boolean
-          meli_agent_system_prompt?: string | null
           meli_auto_answer?: boolean
           meli_enabled?: boolean
-          agent_tone?: string | null
-          agent_orthography?: string[]
-          agent_active_offer?: string | null
-          agent_business_hours?: string | null
-          agent_business_hours_alert?: boolean
-          agent_temporary_closures?: string | null
-          agent_special_instructions?: string | null
           instagram_enabled?: boolean
           whatsapp_enabled?: boolean
           manychat_api_key?: string | null
@@ -107,7 +97,10 @@ export type Database = {
           buffer_seconds?: number
           admin_phone?: string | null
           admin_system_prompt?: string | null
+          agent_name?: string | null
           ig_agent_system_prompt?: string | null
+          wpp_agent_system_prompt?: string | null
+          meli_agent_system_prompt?: string | null
           stories_context_general?: string | null
           stories_context_keywords?: string | null
           ads_context_general?: string | null
@@ -121,16 +114,8 @@ export type Database = {
           lead_reset_after_days?: number | null
           handoff_notification_email?: string | null
           handoff_notifications_enabled?: boolean
-          meli_agent_system_prompt?: string | null
           meli_auto_answer?: boolean
           meli_enabled?: boolean
-          agent_tone?: string | null
-          agent_orthography?: string[]
-          agent_active_offer?: string | null
-          agent_business_hours?: string | null
-          agent_business_hours_alert?: boolean
-          agent_temporary_closures?: string | null
-          agent_special_instructions?: string | null
           instagram_enabled?: boolean
           whatsapp_enabled?: boolean
           manychat_api_key?: string | null

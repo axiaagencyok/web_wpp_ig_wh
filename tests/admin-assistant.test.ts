@@ -92,44 +92,9 @@ describe("executeAdminAction", () => {
     calls.length = 0;
   });
 
-  it("update_agent_config persiste el field correcto", async () => {
-    const { executeAdminAction } = await import("@/lib/admin/execute-action");
-    const tenant = {
-      id: "tenant-1",
-      name: "WHD",
-      google_sheet_id: "abc",
-      google_sheet_range: "Sheet1",
-    } as never;
-
-    const result = await executeAdminAction(
-      {
-        action_type: "update_agent_config",
-        payload: { field: "agent_active_offer", new_value: "20% OFF en SPC" },
-      },
-      tenant,
-    );
-
-    expect(result.ok).toBe(true);
-    const updateCall = calls.find((c) => c.table === "tenants");
-    expect(updateCall).toBeDefined();
-    expect((updateCall!.payload as Record<string, unknown>).agent_active_offer).toBe("20% OFF en SPC");
-  });
-
-  it("update_agent_config con new_value=null limpia el field", async () => {
-    const { executeAdminAction } = await import("@/lib/admin/execute-action");
-    const tenant = { id: "tenant-1", name: "WHD" } as never;
-
-    const result = await executeAdminAction(
-      {
-        action_type: "update_agent_config",
-        payload: { field: "agent_active_offer", new_value: null },
-      },
-      tenant,
-    );
-
-    expect(result.ok).toBe(true);
-    expect(result.message).toContain("dejé vacío");
-  });
+  // update_agent_config quedó deprecado en la migración 023 — los campos
+  // estructurados (agent_active_offer, etc.) se eliminaron de tenants. El
+  // admin ahora edita el prompt completo desde el panel.
 
   it("update_context persiste el field correcto", async () => {
     const { executeAdminAction } = await import("@/lib/admin/execute-action");
