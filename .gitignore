@@ -39,6 +39,13 @@ yarn-error.log*
 # claude code tooling
 .claude/
 
+# supabase CLI cache
+supabase/.temp/
+supabase/.branches/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local notes — no commitear
+MIGRATE-TODO.md
