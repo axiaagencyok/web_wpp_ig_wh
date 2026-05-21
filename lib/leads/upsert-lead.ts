@@ -3,7 +3,14 @@ import { sendLeadNotification } from "@/lib/notifications/resend";
 import type { Conversation, Lead, Tenant } from "@/types/database.types";
 import type { ScoringResult } from "./scoring-agent";
 
-const NOTIFICATION_THRESHOLD = 60;
+// Score mínimo para que un lead exista en la tabla `Leads`. Por debajo
+// de este umbral no insertamos (ni updateamos una row existente para
+// bajarle el score). El dashboard Lovable consulta esa tabla directo, así
+// que filtrar acá es equivalente a "Lovable solo muestra leads calificados".
+//
+// Es el mismo número que usábamos antes solo para gatillar el mail —
+// "lead que importa" = "lead que persistimos" = "lead que notificamos".
+const QUALIFIED_MIN_SCORE = 60;
 const RESET_DAYS_DEFAULT = 3;
 
 export interface UpsertLeadParams {
@@ -17,11 +24,18 @@ export interface UpsertLeadParams {
  *
  * Comportamiento:
  *
- *   1. Si no existe un lead previo para (tenant_id, manychat_id) → INSERT con
- *      estado='Nuevo' (default del schema), es_recurrente=false (default),
- *      compras_anteriores=0 (default).
+ *   0. Gate de score (QUALIFIED_MIN_SCORE = 60): si `scoring.lead_score < 60`
+ *      la función no toca la tabla `Leads` — ni INSERT (lead nuevo poco
+ *      calificado) ni UPDATE (no degradar un lead existente con un score
+ *      más bajo). Devuelve null y loguea el skip. Esto mantiene la tabla
+ *      `Leads` como fuente de leads calificados — Lovable la consulta
+ *      directo sin filtros adicionales.
  *
- *   2. Si EXISTE un lead previo:
+ *   1. Si no existe un lead previo para (tenant_id, manychat_id) Y el score
+ *      pasa el gate → INSERT con estado='Nuevo' (default del schema),
+ *      es_recurrente=false (default), compras_anteriores=0 (default).
+ *
+ *   2. Si EXISTE un lead previo Y el score pasa el gate:
  *      a. Chequea condiciones de "reset":
  *           - estado IN ('Cerrado','Descartado'), o
  *           - updated_at más viejo que tenant.lead_reset_after_days días
@@ -35,10 +49,12 @@ export interface UpsertLeadParams {
  *           es_recurrente/compras_anteriores. Solo se refrescan los campos
  *           de scoring (datos del último turno).
  *
- *   3. En todos los casos, si el lead post-upsert tiene `lead_score >= 60`
+ *   3. En todos los casos donde el lead se persistió, si `lead_score >= 60`
  *      Y `notificado_at IS NULL`, se stampea `notificado_at=now()` con un
  *      guard `is null` (anti doble notificación bajo concurrencia) y se
- *      dispara `sendLeadNotification` fire-and-forget.
+ *      dispara `sendLeadNotification` (awaited — ver commit del bug fix
+ *      del mail). El gate del paso 0 garantiza que si llegamos acá el
+ *      score ya superó el umbral.
  *
  * Nunca tira excepción al caller — errores se logean y la función devuelve null.
  */
@@ -78,8 +94,20 @@ export async function upsertLead(params: UpsertLeadParams): Promise<Lead | null>
 
   let lead: Lead | null = null;
 
+  // Gate de score: leads bajo el umbral NO entran a la tabla. Si ya hay
+  // uno existente con score más alto, lo dejamos como está (no degradar).
+  const isQualified = scoring.lead_score >= QUALIFIED_MIN_SCORE;
+
   if (!manychatId) {
     // Sin manychat_id no podemos identificar al cliente — solo INSERT plano.
+    // Si no califica, no insertamos. Como no hay manera de cruzarlo con un
+    // lead existente, simplemente lo descartamos.
+    if (!isQualified) {
+      console.log(
+        `[upsertLead] skip insert: no manychat_id + score=${scoring.lead_score} < ${QUALIFIED_MIN_SCORE} (tenant ${tenant.id}, conv ${conversation.id})`
+      );
+      return null;
+    }
     const { data, error } = await adminClient
       .from("Leads")
       .insert(insertPayload)
@@ -92,7 +120,7 @@ export async function upsertLead(params: UpsertLeadParams): Promise<Lead | null>
     lead = data;
   } else {
     // Lookup explícito en vez de upsert ciego — necesitamos saber si existe
-    // y decidir reset vs update.
+    // y decidir reset vs update vs skip.
     const { data: existing, error: lookupErr } = await adminClient
       .from("Leads")
       .select("id, estado, notificado_at, updated_at, compras_anteriores")
@@ -105,7 +133,14 @@ export async function upsertLead(params: UpsertLeadParams): Promise<Lead | null>
     }
 
     if (!existing) {
-      // Lead nuevo → INSERT
+      // Lead nuevo → INSERT solo si pasa el gate. Si no, no creamos la fila
+      // — el lead aparece en `Leads` recién cuando el cliente califica.
+      if (!isQualified) {
+        console.log(
+          `[upsertLead] skip insert: no existing + score=${scoring.lead_score} < ${QUALIFIED_MIN_SCORE} (tenant ${tenant.id}, manychat ${manychatId})`
+        );
+        return null;
+      }
       const { data, error } = await adminClient
         .from("Leads")
         .insert(insertPayload)
@@ -117,7 +152,16 @@ export async function upsertLead(params: UpsertLeadParams): Promise<Lead | null>
       }
       lead = data;
     } else {
-      // Lead existente — evaluar reset vs update preservador.
+      // Lead existente — primero el gate: si el nuevo score quedó por debajo
+      // del umbral, NO updateamos. Preservamos la fila tal como está
+      // (incluyendo score viejo, estado, notificado_at). "No degradar."
+      if (!isQualified) {
+        console.log(
+          `[upsertLead] skip update: existing lead=${existing.id} new_score=${scoring.lead_score} < ${QUALIFIED_MIN_SCORE} — no degradar (tenant ${tenant.id}, manychat ${manychatId})`
+        );
+        return null;
+      }
+      // Lead existente calificado — evaluar reset vs update preservador.
       const resetDays = tenant.lead_reset_after_days ?? RESET_DAYS_DEFAULT;
       const updatedAtMs = new Date(existing.updated_at).getTime();
       const isStale = Date.now() - updatedAtMs > resetDays * 86_400_000;
@@ -174,9 +218,12 @@ export async function upsertLead(params: UpsertLeadParams): Promise<Lead | null>
   const score = lead.lead_score;
   const alreadyNotified = !!lead.notificado_at;
 
-  if (score === null || score < NOTIFICATION_THRESHOLD) {
+  // Doble guard defensivo: el gate de arriba ya descarta scores bajos,
+  // pero si por algún motivo persistimos un score < umbral (no debería
+  // pasar), no notificamos.
+  if (score === null || score < QUALIFIED_MIN_SCORE) {
     console.log(
-      `[upsertLead] skip notify lead=${lead.id} score=${score} threshold=${NOTIFICATION_THRESHOLD}`
+      `[upsertLead] skip notify lead=${lead.id} score=${score} threshold=${QUALIFIED_MIN_SCORE}`
     );
     return lead;
   }
